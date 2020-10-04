@@ -33,7 +33,7 @@ namespace Unigram.ViewModels
         IHandle<UpdateMessageContentOpened>,
         IHandle<UpdateMessageMentionRead>,
         IHandle<UpdateMessageEdited>,
-        IHandle<UpdateMessageViews>,
+        IHandle<UpdateMessageInteractionInfo>,
         IHandle<UpdateMessageSendFailed>,
         IHandle<UpdateMessageSendSucceeded>,
 
@@ -55,7 +55,7 @@ namespace Unigram.ViewModels
 
         public void Handle(UpdateUserChatAction update)
         {
-            if (update.ChatId == _chat?.Id)
+            if (update.ChatId == _chat?.Id && update.MessageThreadId == _threadId && (_type == DialogType.History || _type == DialogType.Thread))
             {
                 BeginOnUIThread(() => Delegate?.UpdateChatActions(_chat, CacheService.GetChatActions(update.ChatId)));
             }
@@ -382,8 +382,12 @@ namespace Unigram.ViewModels
             {
                 return message.SchedulingState != null;
             }
+            else if (_type == DialogType.Thread)
+            {
+                return message.SchedulingState == null && message.MessageThreadId == _threadId;
+            }
 
-            return message.SchedulingState == null && _type == DialogType.Normal;
+            return message.SchedulingState == null && _type == DialogType.History;
         }
 
         public void Handle(UpdateNewMessage update)
@@ -582,14 +586,14 @@ namespace Unigram.ViewModels
             }
         }
 
-        public void Handle(UpdateMessageViews update)
+        public void Handle(UpdateMessageInteractionInfo update)
         {
             if (update.ChatId == _chat?.Id)
             {
                 Handle(update.MessageId, message =>
                 {
-                    message.Views = update.Views;
-                }, (bubble, message) => bubble.UpdateMessageViews(message));
+                    message.InteractionInfo = update.InteractionInfo;
+                }, (bubble, message) => bubble.UpdateMessageInteractionInfo(message));
             }
         }
 

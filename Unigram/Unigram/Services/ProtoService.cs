@@ -38,8 +38,6 @@ namespace Unigram.Services
 
     public interface ICacheService
     {
-        int UserId { get; }
-
         IOptionsService Options { get; }
         JsonValueObject Config { get; }
 
@@ -56,6 +54,8 @@ namespace Unigram.Services
         ConnectionState GetConnectionState();
 
         string GetTitle(Chat chat, bool tiny = false);
+        string GetTitle(MessageForwardInfo info);
+
         Chat GetChat(long id);
         IList<Chat> GetChats(IList<long> ids);
 
@@ -63,6 +63,8 @@ namespace Unigram.Services
 
         bool IsSavedMessages(User user);
         bool IsSavedMessages(Chat chat);
+
+        bool IsRepliesChat(Chat chat);
 
         bool CanPostMessages(Chat chat);
 
@@ -327,7 +329,7 @@ namespace Unigram.Services
 
         private void InitializeDiagnostics()
         {
-            Client.Execute(new SetLogStream(new LogStreamFile(System.IO.Path.Combine(ApplicationData.Current.LocalFolder.Path, "tdlib_log.txt"), 100 * 1024 * 1024)));
+            Client.Execute(new SetLogStream(new LogStreamFile(System.IO.Path.Combine(ApplicationData.Current.LocalFolder.Path, "tdlib_log.txt"), 100 * 1024 * 1024, false)));
             Client.Execute(new SetLogVerbosityLevel(SettingsService.Current.VerbosityLevel));
 
             var tags = Client.Execute(new GetLogTags()) as LogTags;
@@ -514,19 +516,6 @@ namespace Unigram.Services
 
         public Client Client => _client;
 
-        private int? _userId;
-        public int UserId
-        {
-            get
-            {
-                return (_userId = _userId ?? _settings.UserId) ?? 0;
-            }
-            set
-            {
-                _userId = _settings.UserId = value;
-            }
-        }
-
         #region Cache
 
         public ChatListUnreadCount GetUnreadCount(ChatList chatList)
@@ -679,6 +668,10 @@ namespace Unigram.Services
                 {
                     return Strings.Resources.SavedMessages;
                 }
+                else if (chat.Id == _options.RepliesBotChatId)
+                {
+                    return Strings.Resources.RepliesTitle;
+                }
                 else if (tiny)
                 {
                     return user.FirstName;
@@ -686,6 +679,28 @@ namespace Unigram.Services
             }
 
             return chat.Title;
+        }
+
+        public string GetTitle(MessageForwardInfo info)
+        {
+            if (info?.Origin is MessageForwardOriginUser fromUser)
+            {
+                return GetUser(fromUser.SenderUserId)?.GetFullName();
+            }
+            else if (info?.Origin is MessageForwardOriginChat fromChat)
+            {
+                return GetTitle(GetChat(fromChat.SenderChatId));
+            }
+            else if (info?.Origin is MessageForwardOriginChannel fromChannel)
+            {
+                return GetTitle(GetChat(fromChannel.ChatId));
+            }
+            else if (info?.Origin is MessageForwardOriginHiddenUser fromHiddenUser)
+            {
+                return fromHiddenUser.SenderName;
+            }
+
+            return null;
         }
 
         public Chat GetChat(long id)
@@ -710,12 +725,7 @@ namespace Unigram.Services
 
         public bool IsSavedMessages(User user)
         {
-            if (user.Id == _options.MyId)
-            {
-                return true;
-            }
-
-            return false;
+            return user.Id == _options.MyId;
         }
 
         public bool IsSavedMessages(Chat chat)
@@ -726,6 +736,11 @@ namespace Unigram.Services
             }
 
             return false;
+        }
+
+        public bool IsRepliesChat(Chat chat)
+        {
+            return chat.Id == _options.RepliesBotChatId;
         }
 
         public bool CanPostMessages(Chat chat)
@@ -1230,7 +1245,7 @@ namespace Unigram.Services
 
                     value.DraftMessage = updateChatDraftMessage.DraftMessage;
                     SetChatPositions(value, updateChatDraftMessage.Positions);
-                    
+
                     Monitor.Exit(value);
                 }
             }
@@ -1243,6 +1258,13 @@ namespace Unigram.Services
                 if (_chats.TryGetValue(updateChatHasScheduledMessages.ChatId, out Chat value))
                 {
                     value.HasScheduledMessages = updateChatHasScheduledMessages.HasScheduledMessages;
+                }
+            }
+            else if (update is UpdateChatIsBlocked updateChatIsBlocked)
+            {
+                if (_chats.TryGetValue(updateChatIsBlocked.ChatId, out Chat value))
+                {
+                    value.IsBlocked = updateChatIsBlocked.IsBlocked;
                 }
             }
             else if (update is UpdateChatIsMarkedAsUnread updateChatIsMarkedAsUnread)
@@ -1260,7 +1282,7 @@ namespace Unigram.Services
 
                     value.LastMessage = updateChatLastMessage.LastMessage;
                     SetChatPositions(value, updateChatLastMessage.Positions);
-                    
+
                     Monitor.Exit(value);
                 }
             }
@@ -1307,7 +1329,7 @@ namespace Unigram.Services
                     int i;
                     for (i = 0; i < value.Positions.Count; i++)
                     {
-                        if (value.Positions[i].List.ToId()  == updateChatPosition.Position.List.ToId())
+                        if (value.Positions[i].List.ToId() == updateChatPosition.Position.List.ToId())
                         {
                             break;
                         }
@@ -1445,6 +1467,10 @@ namespace Unigram.Services
             {
 
             }
+            else if (update is UpdateMessageInteractionInfo updateMessageInteractionInfo)
+            {
+                
+            }
             else if (update is UpdateMessageMentionRead updateMessageMentionRead)
             {
                 if (_chats.TryGetValue(updateMessageMentionRead.ChatId, out Chat value))
@@ -1461,10 +1487,6 @@ namespace Unigram.Services
 
             }
             else if (update is UpdateMessageSendSucceeded updateMessageSendSucceeded)
-            {
-
-            }
-            else if (update is UpdateMessageViews updateMessageViews)
             {
 
             }
@@ -1499,7 +1521,7 @@ namespace Unigram.Services
 
                 if (updateOption.Name == "my_id" && updateOption.Value is OptionValueInteger myId)
                 {
-                    UserId = myId.Value;
+                    _settings.UserId = (int)myId.Value;
                 }
             }
             else if (update is UpdateRecentStickers updateRecentStickers)

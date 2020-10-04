@@ -440,7 +440,7 @@ namespace Unigram.ViewModels.Chats
         {
         }
 
-        public void OpenChat(long chatId)
+        public void OpenChat(long chatId, bool profile = false)
         {
         }
 
@@ -465,7 +465,7 @@ namespace Unigram.ViewModels.Chats
             return false;
         }
 
-        public void Call(MessageViewModel message)
+        public void Call(MessageViewModel message, bool video)
         {
             throw new NotImplementedException();
         }
@@ -476,6 +476,11 @@ namespace Unigram.ViewModels.Chats
         }
 
         public string GetAdminTitle(int userId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void OpenThread(MessageViewModel message)
         {
             throw new NotImplementedException();
         }

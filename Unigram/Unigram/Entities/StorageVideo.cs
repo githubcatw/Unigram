@@ -17,8 +17,6 @@ namespace Unigram.Entities
         public StorageVideo(StorageFile file, BasicProperties basic, VideoProperties props, MediaEncodingProfile profile)
             : base(file, basic)
         {
-            _fullRectangle = new Rect(0, 0, props.GetWidth(), props.GetHeight());
-
             _basic = basic;
             Properties = props;
             Profile = profile;
@@ -41,7 +39,7 @@ namespace Unigram.Entities
         public override uint Width => Properties.GetWidth();
         public override uint Height => Properties.GetHeight();
 
-        public new static async Task<StorageVideo> CreateAsync(StorageFile file, bool selected)
+        public new static async Task<StorageVideo> CreateAsync(StorageFile file)
         {
             try
             {
@@ -59,7 +57,7 @@ namespace Unigram.Entities
                 var basic = await file.GetBasicPropertiesAsync();
                 var video = await file.Properties.GetVideoPropertiesAsync();
 
-                if (video.Width > 0 && video.Height > 0)
+                if ((video.Width > 0 && video.Height > 0) || (profile.Video.Width > 0 && profile.Video.Height > 0))
                 {
                     return new StorageVideo(file, basic, video, profile);
                 }

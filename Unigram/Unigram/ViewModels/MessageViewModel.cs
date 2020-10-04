@@ -32,12 +32,13 @@ namespace Unigram.ViewModels
         public ReplyMarkup ReplyMarkup { get => _message.ReplyMarkup; set => _message.ReplyMarkup = value; }
         public MessageContent Content { get => _message.Content; set => _message.Content = value; }
         public long MediaAlbumId => _message.MediaAlbumId;
-        public int Views { get => _message.Views; set => _message.Views = value; }
+        public MessageInteractionInfo InteractionInfo { get => _message.InteractionInfo; set => _message.InteractionInfo = value; }
         public string AuthorSignature => _message.AuthorSignature;
         public int ViaBotUserId => _message.ViaBotUserId;
         public double TtlExpiresIn { get => _message.TtlExpiresIn; set => _message.TtlExpiresIn = value; }
         public int Ttl => _message.Ttl;
-        public long ReplyToMessageId => _message.ReplyToMessageId;
+        public long ReplyToMessageId { get => _message.ReplyToMessageId; set => _message.ReplyToMessageId = value; }
+        public long ReplyInChatId => _message.ReplyInChatId;
         public MessageForwardInfo ForwardInfo => _message.ForwardInfo;
         public int EditDate { get => _message.EditDate; set => _message.EditDate = value; }
         public int Date => _message.Date;
@@ -47,11 +48,15 @@ namespace Unigram.ViewModels
         public bool CanBeDeletedOnlyForSelf => _message.CanBeDeletedOnlyForSelf;
         public bool CanBeForwarded => _message.CanBeForwarded;
         public bool CanBeEdited => _message.CanBeEdited;
+        public bool CanGetMessageThread => _message.CanGetMessageThread;
+        public bool CanGetStatistics => _message.CanGetStatistics;
         public bool IsOutgoing { get => _message.IsOutgoing; set => _message.IsOutgoing = value; }
         public MessageSchedulingState SchedulingState => _message.SchedulingState;
         public MessageSendingState SendingState => _message.SendingState;
         public long ChatId => _message.ChatId;
+        public long MessageThreadId => _message.MessageThreadId;
         public int SenderUserId => _message.SenderUserId;
+        public long SenderChatId => _message.SenderChatId;
         public long Id => _message.Id;
 
         public Photo GetPhoto() => _message.GetPhoto();
@@ -73,6 +78,11 @@ namespace Unigram.ViewModels
         public User GetSenderUser()
         {
             return ProtoService.GetUser(_message.SenderUserId);
+        }
+
+        public Chat GetSenderChat()
+        {
+            return ProtoService.GetChat(_message.SenderChatId);
         }
 
         public User GetViaBotUser()
@@ -158,6 +168,10 @@ namespace Unigram.ViewModels
         public bool IsShareable()
         {
             var message = this;
+            if (message.SchedulingState != null)
+            {
+                return false;
+            }
             //if (currentPosition != null && !currentPosition.last)
             //{
             //    return false;
@@ -242,11 +256,18 @@ namespace Unigram.ViewModels
 
         public void UpdateWith(MessageViewModel message)
         {
+            UpdateWith(message.Get());
+        }
+
+        public void UpdateWith(Message message)
+        {
             _message.AuthorSignature = message.AuthorSignature;
             _message.CanBeDeletedForAllUsers = message.CanBeDeletedForAllUsers;
             _message.CanBeDeletedOnlyForSelf = message.CanBeDeletedOnlyForSelf;
             _message.CanBeEdited = message.CanBeEdited;
             _message.CanBeForwarded = message.CanBeForwarded;
+            _message.CanGetMessageThread = message.CanGetMessageThread;
+            _message.CanGetStatistics = message.CanGetStatistics;
             _message.ChatId = message.ChatId;
             _message.ContainsUnreadMention = message.ContainsUnreadMention;
             //_message.Content = message.Content;
@@ -256,15 +277,18 @@ namespace Unigram.ViewModels
             _message.Id = message.Id;
             _message.IsChannelPost = message.IsChannelPost;
             _message.IsOutgoing = message.IsOutgoing;
+            _message.MessageThreadId = message.MessageThreadId;
             _message.MediaAlbumId = message.MediaAlbumId;
             _message.ReplyMarkup = message.ReplyMarkup;
+            _message.ReplyInChatId = message.ReplyInChatId;
             _message.ReplyToMessageId = message.ReplyToMessageId;
+            _message.SenderChatId = message.SenderChatId;
             _message.SenderUserId = message.SenderUserId;
             _message.SendingState = message.SendingState;
             _message.Ttl = message.Ttl;
             _message.TtlExpiresIn = message.TtlExpiresIn;
             _message.ViaBotUserId = message.ViaBotUserId;
-            _message.Views = message.Views;
+            _message.InteractionInfo = message.InteractionInfo;
 
             if (_message.Content is MessageAlbum album)
             {

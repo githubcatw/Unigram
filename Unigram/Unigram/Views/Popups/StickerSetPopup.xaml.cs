@@ -37,7 +37,6 @@ namespace Unigram.Views.Popups
             _zoomer.Opening = _handler.UnloadVisibleItems;
             _zoomer.Closing = _handler.ThrottleVisibleItems;
             _zoomer.DownloadFile = fileId => ViewModel.ProtoService.DownloadFile(fileId, 32);
-            _zoomer.GetEmojisAsync = fileId => ViewModel.ProtoService.SendAsync(new GetStickerEmojis(new InputFileId(fileId)));
 
             SecondaryButtonText = Strings.Resources.Close;
         }
@@ -60,7 +59,6 @@ namespace Unigram.Views.Popups
             _zoomer.Opening = null;
             _zoomer.Closing = null;
             _zoomer.DownloadFile = null;
-            _zoomer.GetEmojisAsync = null;
         }
 
         #region Show
@@ -170,7 +168,7 @@ namespace Unigram.Views.Popups
 
             if (args.Phase == 0)
             {
-                var title = content.Children[1] as TextBlock;
+                var title = content.Children[content.Children.Count - 1] as TextBlock;
                 title.Text = sticker.Emoji;
             }
             else if (args.Phase == 1)

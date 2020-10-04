@@ -82,7 +82,7 @@ namespace Unigram.ViewModels
         protected readonly ILocationService _locationService;
         protected readonly INotificationsService _pushService;
         protected readonly IPlaybackService _playbackService;
-        protected readonly IVoIPService _voipService;
+        protected readonly IVoipService _voipService;
         protected readonly INetworkService _networkService;
         protected readonly IMessageFactory _messageFactory;
 
@@ -92,7 +92,7 @@ namespace Unigram.ViewModels
 
         public IDialogDelegate Delegate { get; set; }
 
-        public DialogViewModel(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoIPService voipService, INetworkService networkService, IMessageFactory messageFactory)
+        public DialogViewModel(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoipService voipService, INetworkService networkService, IMessageFactory messageFactory)
             : base(protoService, cacheService, settingsService, aggregator)
         {
             _locationService = locationService;
@@ -120,7 +120,7 @@ namespace Unigram.ViewModels
             OpenStickersCommand = new RelayCommand(OpenStickersExecute);
             ChatDeleteCommand = new RelayCommand(ChatDeleteExecute);
             ChatClearCommand = new RelayCommand(ChatClearExecute);
-            CallCommand = new RelayCommand(CallExecute);
+            CallCommand = new RelayCommand<bool>(CallExecute);
             UnpinMessageCommand = new RelayCommand(UnpinMessageExecute);
             UnblockCommand = new RelayCommand(UnblockExecute);
             ShareContactCommand = new RelayCommand(ShareContactExecute);
@@ -134,7 +134,6 @@ namespace Unigram.ViewModels
             SwitchCommand = new RelayCommand<string>(SwitchExecute);
             SetTimerCommand = new RelayCommand(SetTimerExecute);
             ActionCommand = new RelayCommand(ActionExecute);
-            DiscussCommand = new RelayCommand(DiscussExecute);
             OpenMessageCommand = new RelayCommand<Message>(OpenMessageExecute);
             ScheduledCommand = new RelayCommand(ScheduledExecute);
 
@@ -156,6 +155,7 @@ namespace Unigram.ViewModels
             MessageCopyLinkCommand = new RelayCommand<MessageViewModel>(MessageCopyLinkExecute);
             MessageEditLastCommand = new RelayCommand(MessageEditLastExecute);
             MessageEditCommand = new RelayCommand<MessageViewModel>(MessageEditExecute);
+            MessageThreadCommand = new RelayCommand<MessageViewModel>(MessageThreadExecute);
             MessagePinCommand = new RelayCommand<MessageViewModel>(MessagePinExecute);
             MessageReportCommand = new RelayCommand<MessageViewModel>(MessageReportExecute);
             MessageAddStickerCommand = new RelayCommand<MessageViewModel>(MessageAddStickerExecute);
@@ -240,14 +240,8 @@ namespace Unigram.ViewModels
         protected Chat _migratedChat;
         public Chat MigratedChat
         {
-            get
-            {
-                return _migratedChat;
-            }
-            set
-            {
-                Set(ref _migratedChat, value);
-            }
+            get => _migratedChat;
+            set => Set(ref _migratedChat, value);
         }
 
         protected Chat _linkedChat;
@@ -255,6 +249,16 @@ namespace Unigram.ViewModels
         {
             get => _linkedChat;
             set => Set(ref _linkedChat, value);
+        }
+
+        protected long _threadId => _thread?.MessageThreadId ?? 0;
+        public long ThreadId => _thread?.MessageThreadId ?? 0;
+
+        protected MessageThreadInfo _thread;
+        public MessageThreadInfo Thread
+        {
+            get => _thread;
+            set => Set(ref _thread, value);
         }
 
         protected Chat _chat;
@@ -277,7 +281,7 @@ namespace Unigram.ViewModels
         //    set => Set(ref _isSchedule, value);
         //}
         private DialogType _type => Type;
-        public virtual DialogType Type => DialogType.Normal;
+        public virtual DialogType Type => DialogType.History;
 
         private string _lastSeen;
         public string LastSeen
@@ -401,7 +405,7 @@ namespace Unigram.ViewModels
         {
             get
             {
-                return _chatActionManager = _chatActionManager ?? new OutputChatActionManager(ProtoService, _chat);
+                return _chatActionManager = _chatActionManager ?? new OutputChatActionManager(ProtoService, _chat, _threadId);
             }
         }
 
@@ -620,7 +624,12 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                if (_type != DialogType.Normal || _isLoadingNextSlice || _isLoadingPreviousSlice || Items.Count < 1 || IsLastSliceLoaded == true)
+                if (_type != DialogType.History && _type != DialogType.Thread)
+                {
+                    return;
+                }
+
+                if (_isLoadingNextSlice || _isLoadingPreviousSlice || Items.Count < 1 || IsLastSliceLoaded == true)
                 {
                     return;
                 }
@@ -646,21 +655,19 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                var limit = 50;
-
-                //for (int i = 0; i < Items.Count; i++)
-                //{
-                //    if (Items[i].Id != 0 && Items[i].Id < maxId)
-                //    {
-                //        maxId = Items[i].Id;
-                //    }
-                //}
-
                 System.Diagnostics.Debug.WriteLine("DialogViewModel: LoadNextSliceAsync: Begin request");
 
-                //return;
+                Function func;
+                if (_threadId != 0)
+                {
+                    func = new GetMessageThreadHistory(chat.Id, _threadId, maxId.Value, 0, 50);
+                }
+                else
+                {
+                    func = new GetChatHistory(chat.Id, maxId.Value, 0, 50, false);
+                }
 
-                var response = await ProtoService.SendAsync(new GetChatHistory(chat.Id, maxId.Value, 0, limit, false));
+                var response = await ProtoService.SendAsync(func);
                 if (response is Messages messages)
                 {
                     if (messages.MessagesValue.Count > 0)
@@ -723,7 +730,12 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                if (_type != DialogType.Normal || _isLoadingNextSlice || _isLoadingPreviousSlice || chat == null || Items.Count < 1)
+                if (_type != DialogType.History && _type != DialogType.Thread)
+                {
+                    return;
+                }
+
+                if (_isLoadingNextSlice || _isLoadingPreviousSlice || chat == null || Items.Count < 1)
                 {
                     return;
                 }
@@ -752,8 +764,6 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                var limit = 50;
-
                 //for (int i = 0; i < Messages.Count; i++)
                 //{
                 //    if (Messages[i].Id != 0 && Messages[i].Id < maxId)
@@ -762,7 +772,17 @@ namespace Unigram.ViewModels
                 //    }
                 //}
 
-                var response = await ProtoService.SendAsync(new GetChatHistory(chat.Id, maxId.Value, -49, limit, false));
+                Function func;
+                if (_threadId != 0)
+                {
+                    func = new GetMessageThreadHistory(chat.Id, _threadId, maxId.Value, -49, 50);
+                }
+                else
+                {
+                    func = new GetChatHistory(chat.Id, maxId.Value, -49, 50, false);
+                }
+
+                var response = await ProtoService.SendAsync(func);
                 if (response is Messages messages)
                 {
                     if (messages.MessagesValue.Any(x => !Items.ContainsKey(x.Id)))
@@ -803,13 +823,13 @@ namespace Unigram.ViewModels
         protected async Task AddHeaderAsync()
         {
             var previous = Items.FirstOrDefault();
-            if (previous != null && (previous.Content is MessageHeaderDate || previous.Id == 0))
+            if (previous != null && (previous.Content is MessageHeaderDate /*|| previous.Id == 0*/))
             {
                 return;
             }
 
             var chat = _chat;
-            if (chat == null || _type != DialogType.Normal)
+            if (chat == null || _type != DialogType.History)
             {
                 goto AddDate;
             }
@@ -841,14 +861,34 @@ namespace Unigram.ViewModels
                 var message = $"{Strings.Resources.BotInfoTitle}{Environment.NewLine}{fullInfo.BotInfo.Description}";
                 var text = new FormattedText(message, entities);
 
-                Items.Insert(0, _messageFactory.Create(this, new Message(0, user.Id, chat.Id, null, null, false, false, false, true, false, false, false, 0, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageText(text, null), null)));
+                Items.Insert(0, _messageFactory.Create(this, new Message(0, user.Id, 0, chat.Id, null, null, false, false, false, true, false, false, false, false, false, 0, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageText(text, null), null)));
                 return;
             }
 
             AddDate:
-            if (previous != null)
+            var thread = _thread;
+            if (thread != null)
             {
-                Items.Insert(0, _messageFactory.Create(this, new Message(0, previous.SenderUserId, previous.ChatId, null, null, previous.IsOutgoing, false, false, true, false, previous.IsChannelPost, false, previous.Date, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageHeaderDate(), null)));
+                var replied = thread.Messages.OrderBy(x => x.Id).Select(x => _messageFactory.Create(this, x)).ToList();
+                await ProcessMessagesAsync(chat, replied);
+
+                previous = replied[0];
+
+                if (Items.Count > 0)
+                {
+                    Items.Insert(0, _messageFactory.Create(this, new Message(0, previous.SenderUserId, previous.SenderChatId, previous.ChatId, null, null, previous.IsOutgoing, false, false, true, false, false, false, previous.IsChannelPost, false, previous.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageCustomServiceAction(Strings.Resources.DiscussionStarted), null)));
+                }
+                else
+                {
+                    Items.Insert(0, _messageFactory.Create(this, new Message(0, previous.SenderUserId, previous.SenderChatId, previous.ChatId, null, null, previous.IsOutgoing, false, false, true, false, false, false, previous.IsChannelPost, false, previous.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageCustomServiceAction(Strings.Resources.NoComments), null)));
+                }
+
+                Items.Insert(0, previous);
+                Items.Insert(0, _messageFactory.Create(this, new Message(0, previous.SenderUserId, previous.SenderChatId, previous.ChatId, null, null, previous.IsOutgoing, false, false, true, false, false, false, previous.IsChannelPost, false, previous.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageHeaderDate(), null)));
+            }
+            else if (previous != null)
+            {
+                Items.Insert(0, _messageFactory.Create(this, new Message(0, previous.SenderUserId, previous.SenderChatId, previous.ChatId, null, null, previous.IsOutgoing, false, false, true, false, false, false, previous.IsChannelPost, false, previous.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageHeaderDate(), null)));
             }
         }
 
@@ -928,7 +968,7 @@ namespace Unigram.ViewModels
                     }
                 }
 
-                var response = await ProtoService.SendAsync(new SearchChatMessages(chat.Id, string.Empty, 0, fromMessageId, -9, 10, new SearchMessagesFilterUnreadMention()));
+                var response = await ProtoService.SendAsync(new SearchChatMessages(chat.Id, string.Empty, 0, fromMessageId, -9, 10, new SearchMessagesFilterUnreadMention(), _threadId));
                 if (response is Messages messages)
                 {
                     var stack = new List<long>();
@@ -981,7 +1021,7 @@ namespace Unigram.ViewModels
 
         public async Task LoadMessageSliceAsync(long? previousId, long maxId, VerticalAlignment alignment = VerticalAlignment.Center, double? pixel = null, ScrollIntoViewAlignment? direction = null, bool? disableAnimation = null, bool second = false)
         {
-            if (_type != DialogType.Normal)
+            if (_type != DialogType.History && _type != DialogType.Thread)
             {
                 return;
             }
@@ -1054,10 +1094,17 @@ namespace Unigram.ViewModels
                     _goBackStack.Push(previousId.Value);
                 }
 
-                var offset = -25;
-                var limit = 50;
+                Function func;
+                if (_threadId != 0)
+                {
+                    func = new GetMessageThreadHistory(chat.Id, _threadId, maxId, -25, 50);
+                }
+                else
+                {
+                    func = new GetChatHistory(chat.Id, maxId, -25, 50, false);
+                }
 
-                var response = await ProtoService.SendAsync(new GetChatHistory(chat.Id, maxId, offset, limit, false));
+                var response = await ProtoService.SendAsync(func);
                 if (response is Messages messages)
                 {
                     _groupedMessages.Clear();
@@ -1071,9 +1118,24 @@ namespace Unigram.ViewModels
                     var replied = messages.MessagesValue.OrderBy(x => x.Id).Select(x => _messageFactory.Create(this, x)).ToList();
                     await ProcessMessagesAsync(chat, replied);
 
+                    long lastReadMessageId;
+                    long lastMessageId;
+
+                    var thread = _thread;
+                    if (thread != null)
+                    {
+                        lastReadMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
+                        lastMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastMessageId;
+                    }
+                    else
+                    {
+                        lastReadMessageId = chat.LastReadInboxMessageId;
+                        lastMessageId = chat.LastMessage?.Id ?? long.MaxValue;
+                    }
+
                     // If we're loading from the last read message
                     // then we want to skip it to align first unread message at top
-                    if (chat.LastReadInboxMessageId != chat.LastMessage?.Id)
+                    if (lastReadMessageId != lastMessageId)
                     {
                         var target = default(MessageViewModel);
                         var index = -1;
@@ -1081,7 +1143,7 @@ namespace Unigram.ViewModels
                         for (int i = 0; i < replied.Count; i++)
                         {
                             var current = replied[i];
-                            if (current.Id > chat.LastReadInboxMessageId)
+                            if (current.Id > lastReadMessageId)
                             {
                                 if (target == null && !current.IsOutgoing)
                                 {
@@ -1098,16 +1160,16 @@ namespace Unigram.ViewModels
 
                         if (target != null)
                         {
-                            if (index != -1)
+                            if (index > 0)
                             {
-                                replied.Insert(index, _messageFactory.Create(this, new Message(0, target.SenderUserId, target.ChatId, null, null, target.IsOutgoing, false, false, true, false, target.IsChannelPost, false, target.Date, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageHeaderUnread(), null)));
+                                replied.Insert(index, _messageFactory.Create(this, new Message(0, target.SenderUserId, target.SenderChatId, target.ChatId, null, null, target.IsOutgoing, false, false, true, false, false, false, target.IsChannelPost, false, target.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageHeaderUnread(), null)));
                             }
-                            else if (maxId == chat.LastReadInboxMessageId)
+                            else if (maxId == lastReadMessageId)
                             {
                                 Logs.Logger.Debug(Logs.Target.Chat, "Looking for first unread message, can't find it");
                             }
 
-                            if (maxId == chat.LastReadInboxMessageId)
+                            if (maxId == lastReadMessageId)
                             {
                                 maxId = target.Id;
                                 pixel = 28 + 48 + 4;
@@ -1117,7 +1179,7 @@ namespace Unigram.ViewModels
 
                     // If we're loading the last message and it has been read already
                     // then we want to align it at bottom, as it might be taller than the window height
-                    if (maxId == chat.LastReadInboxMessageId && maxId == chat.LastMessage?.Id && alignment != VerticalAlignment.Center)
+                    if (maxId == lastReadMessageId && maxId == lastMessageId && alignment != VerticalAlignment.Center)
                     {
                         alignment = VerticalAlignment.Bottom;
                         pixel = null;
@@ -1192,7 +1254,7 @@ namespace Unigram.ViewModels
                     var target = replied.FirstOrDefault();
                     if (target != null)
                     {
-                        replied.Insert(0, _messageFactory.Create(this, new Message(0, target.SenderUserId, target.ChatId, null, target.SchedulingState, target.IsOutgoing, false, false, true, false, target.IsChannelPost, false, target.Date, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageHeaderDate(), null)));
+                        replied.Insert(0, _messageFactory.Create(this, new Message(0, target.SenderUserId, target.SenderChatId, target.ChatId, null, target.SchedulingState, target.IsOutgoing, false, false, true, false, false, false, target.IsChannelPost, false, target.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageHeaderDate(), null)));
                     }
 
                     Items.ReplaceWith(replied);
@@ -1491,6 +1553,18 @@ namespace Unigram.ViewModels
                 {
                     _filesMap[voiceNote.Voice.Id].Add(target);
                 }
+                else if (content is ChatPhoto chatPhoto)
+                {
+                    if (chatPhoto.Animation != null)
+                    {
+                        _filesMap[chatPhoto.Animation.File.Id].Add(target);
+                    }
+
+                    foreach (var size in chatPhoto.Sizes)
+                    {
+                        _filesMap[size.Photo.Id].Add(target);
+                    }
+                }
 
                 if (target.IsSaved() || ((chat.Type is ChatTypeBasicGroup || chat.Type is ChatTypeSupergroup) && !target.IsOutgoing && !target.IsChannelPost))
                 {
@@ -1504,12 +1578,20 @@ namespace Unigram.ViewModels
                                 _photosMap[user.ProfilePhoto.Small.Id].Add(target);
                             }
                         }
-                        else if (target.ForwardInfo?.Origin is MessageForwardOriginChannel post)
+                        else if (target.ForwardInfo?.Origin is MessageForwardOriginChat fromChat)
                         {
-                            var fromChat = message.ProtoService.GetChat(post.ChatId);
-                            if (fromChat != null && fromChat.Photo != null)
+                            var originChat = message.ProtoService.GetChat(fromChat.SenderChatId);
+                            if (originChat != null && originChat.Photo != null)
                             {
-                                _photosMap[fromChat.Photo.Small.Id].Add(target);
+                                _photosMap[originChat.Photo.Small.Id].Add(target);
+                            }
+                        }
+                        else if (target.ForwardInfo?.Origin is MessageForwardOriginChannel fromChannel)
+                        {
+                            var originChannel = message.ProtoService.GetChat(fromChannel.ChatId);
+                            if (originChannel != null && originChannel.Photo != null)
+                            {
+                                _photosMap[originChannel.Photo.Small.Id].Add(target);
                             }
                         }
                     }
@@ -1591,106 +1673,65 @@ namespace Unigram.ViewModels
             }
         }
 
-        private async void ProcessReplies(Chat chat, IList<MessageViewModel> slice)
+        private void ProcessReplies(Chat chat, IList<MessageViewModel> slice)
         {
-            var replies = new List<long>();
-
             foreach (var message in slice)
             {
-                var replyId = 0L;
-
-                if (message.Content is MessagePinMessage pinMessage)
+                var thread = _thread;
+                if (thread?.ChatId == message.ReplyInChatId &&
+                    thread?.Messages[0].Id == message.ReplyToMessageId)
                 {
-                    replyId = pinMessage.MessageId;
-                }
-                else if (message.Content is MessageGameScore gameScore)
-                {
-                    replyId = gameScore.GameMessageId;
-                }
-                else if (message.Content is MessagePaymentSuccessful paymentSuccessful)
-                {
-                    replyId = paymentSuccessful.InvoiceMessageId;
-                }
-                else if (message.ReplyToMessageId != 0)
-                {
-                    replyId = message.ReplyToMessageId;
+                    message.ReplyToMessageId = 0;
+                    continue;
                 }
 
-                if (replyId != 0)
+                if (message.ReplyToMessageId != 0 ||
+                    message.Content is MessagePinMessage ||
+                    message.Content is MessageGameScore ||
+                    message.Content is MessagePaymentSuccessful)
                 {
-                    var enqueue = true;
+                    message.ReplyToMessageState = ReplyToMessageState.Loading;
 
-                    foreach (var reply in slice)
+                    ProtoService.Send(new GetRepliedMessage(message.ChatId, message.Id), response =>
                     {
-                        if (reply.Id == replyId)
-                        {
-                            message.ReplyToMessage = _messageFactory.Create(this, reply.Get());
-
-                            enqueue = false;
-                            break;
-                        }
-                    }
-
-                    if (enqueue && !replies.Contains(replyId))
-                    {
-                        message.ReplyToMessageState = ReplyToMessageState.Loading;
-                        replies.Add(replyId);
-                    }
-                }
-            }
-
-
-
-            var response = await ProtoService.SendAsync(new GetMessages(chat.Id, replies));
-            if (response is Telegram.Td.Api.Messages messages)
-            {
-                foreach (var message in slice)
-                {
-                    foreach (var result in messages.MessagesValue)
-                    {
-                        if (result == null)
-                        {
-                            continue;
-                        }
-
-                        if (message.Content is MessagePinMessage pinMessage && pinMessage.MessageId == result.Id)
+                        if (response is Message result)
                         {
                             message.ReplyToMessage = _messageFactory.Create(this, result);
-                            break;
+                            message.ReplyToMessageState = ReplyToMessageState.None;
                         }
-                        else if (message.Content is MessageGameScore gameScore && gameScore.GameMessageId == result.Id)
+                        else
                         {
-                            message.ReplyToMessage = _messageFactory.Create(this, result);
-                            break;
+                            message.ReplyToMessageState = ReplyToMessageState.Deleted;
                         }
-                        else if (message.Content is MessagePaymentSuccessful paymentSuccessful && paymentSuccessful.InvoiceMessageId == result.Id)
-                        {
-                            message.ReplyToMessage = _messageFactory.Create(this, result);
-                            break;
-                        }
-                        else if (message.ReplyToMessageId == result.Id)
-                        {
-                            message.ReplyToMessage = _messageFactory.Create(this, result);
-                            break;
-                        }
-                    }
 
-                    if (message.ReplyToMessage == null)
-                    {
-                        message.ReplyToMessageState = ReplyToMessageState.Deleted;
-                    }
-                    else
-                    {
-                        message.ReplyToMessageState = ReplyToMessageState.None;
-                    }
-
-                    Handle(message, bubble => bubble.UpdateMessageReply(message), service => service.UpdateMessage(message));
+                        BeginOnUIThread(() => Handle(message, bubble => bubble.UpdateMessageReply(message), service => service.UpdateMessage(message)));
+                    });
                 }
             }
         }
 
         public override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, IDictionary<string, object> state)
         {
+            if (parameter is string pair)
+            {
+                var split = pair.Split(';');
+                if (split.Length != 2)
+                {
+                    return;
+                }
+
+                var failed1 = !long.TryParse(split[0], out long result1);
+                var failed2 = !long.TryParse(split[1], out long result2);
+
+                if (failed1 || failed2)
+                {
+                    return;
+                }
+
+                Thread = await ProtoService.SendAsync(new GetMessageThread(result1, result2)) as MessageThreadInfo;
+                parameter = _thread.ChatId;
+            }
+
             var chat = ProtoService.GetChat((long)parameter);
             if (chat == null)
             {
@@ -1742,16 +1783,31 @@ namespace Unigram.ViewModels
             {
                 bool TryRemove(long chatId, out long v1, out long v2)
                 {
-                    var a = Settings.Chats.TryRemove(chat.Id, ChatSetting.ReadInboxMaxId, out v1);
-                    var b = Settings.Chats.TryRemove(chat.Id, ChatSetting.Index, out v2);
+                    var a = Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.ReadInboxMaxId, out v1);
+                    var b = Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Index, out v2);
                     return a && b;
                 }
 
-                if (TryRemove(chat.Id, out long readIndboxMaxId, out long start) &&
-                    readIndboxMaxId == chat.LastReadInboxMessageId &&
-                    start < chat.LastReadInboxMessageId)
+                long lastReadMessageId;
+                long lastMessageId;
+
+                var thread = _thread;
+                if (thread != null)
                 {
-                    if (Settings.Chats.TryRemove(chat.Id, ChatSetting.Pixel, out double pixel))
+                    lastReadMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
+                    lastMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastMessageId;
+                }
+                else
+                {
+                    lastReadMessageId = chat.LastReadInboxMessageId;
+                    lastMessageId = chat.LastMessage?.Id ?? long.MaxValue;
+                }
+
+                if (TryRemove(chat.Id, out long readInboxMaxId, out long start) &&
+                    readInboxMaxId == lastReadMessageId &&
+                    start < lastReadMessageId)
+                {
+                    if (Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Pixel, out double pixel))
                     {
                         Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Loading messages from specific pixel", chat.Id));
 
@@ -1764,18 +1820,18 @@ namespace Unigram.ViewModels
                         LoadMessageSliceAsync(null, start, VerticalAlignment.Bottom);
                     }
                 }
-                else if (chat.UnreadCount > 0)
+                else /*if (chat.UnreadCount > 0)*/
                 {
                     Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Loading messages from LastReadInboxMessageId: {1}", chat.Id, chat.LastReadInboxMessageId));
 
-                    LoadMessageSliceAsync(null, chat.LastReadInboxMessageId, VerticalAlignment.Top);
+                    LoadMessageSliceAsync(null, lastReadMessageId, VerticalAlignment.Top);
                 }
-                else
-                {
-                    Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Loading messages from LastMessageId: {1}", chat.Id, chat.LastMessage?.Id));
+                //else
+                //{
+                //    Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Loading messages from LastMessageId: {1}", chat.Id, chat.LastMessage?.Id));
 
-                    LoadMessageSliceAsync(null, chat.LastMessage?.Id ?? long.MaxValue, VerticalAlignment.Bottom);
-                }
+                //    LoadMessageSliceAsync(null, chat.LastMessage?.Id ?? long.MaxValue, VerticalAlignment.Bottom);
+                //}
             }
 #pragma warning restore CS4014
 
@@ -1917,7 +1973,7 @@ namespace Unigram.ViewModels
             ShowPinnedMessage(chat);
             ShowSwitchInline(state);
 
-            if (_type == DialogType.Normal && App.DataPackages.TryRemove(chat.Id, out DataPackageView package))
+            if (_type == DialogType.History && App.DataPackages.TryRemove(chat.Id, out DataPackageView package))
             {
                 await HandlePackageAsync(package);
             }
@@ -1956,8 +2012,8 @@ namespace Unigram.ViewModels
                 var field = ListField;
                 if (field == null)
                 {
-                    Settings.Chats.TryRemove(chat.Id, ChatSetting.Index, out long index);
-                    Settings.Chats.TryRemove(chat.Id, ChatSetting.Pixel, out double pixel);
+                    Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Index, out long index);
+                    Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Pixel, out double pixel);
 
                     Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Removing scrolling position, generic reason", chat.Id));
 
@@ -1970,23 +2026,35 @@ namespace Unigram.ViewModels
                     var start = Items[panel.LastVisibleIndex].Id;
                     if (start != chat.LastMessage?.Id)
                     {
+                        long lastReadMessageId;
+
+                        var thread = _thread;
+                        if (thread != null)
+                        {
+                            lastReadMessageId = thread.Messages[0].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
+                        }
+                        else
+                        {
+                            lastReadMessageId = chat.LastReadInboxMessageId;
+                        }
+
                         var container = field.ContainerFromIndex(panel.LastVisibleIndex) as ListViewItem;
                         if (container != null)
                         {
                             var transform = container.TransformToVisual(field);
                             var position = transform.TransformPoint(new Point());
 
-                            Settings.Chats[chat.Id, ChatSetting.ReadInboxMaxId] = chat.LastReadInboxMessageId;
-                            Settings.Chats[chat.Id, ChatSetting.Index] = start;
-                            Settings.Chats[chat.Id, ChatSetting.Pixel] = field.ActualHeight - (position.Y + container.ActualHeight);
+                            Settings.Chats[chat.Id, _threadId, ChatSetting.ReadInboxMaxId] = lastReadMessageId;
+                            Settings.Chats[chat.Id, _threadId, ChatSetting.Index] = start;
+                            Settings.Chats[chat.Id, _threadId, ChatSetting.Pixel] = field.ActualHeight - (position.Y + container.ActualHeight);
 
                             Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Saving scrolling position, message: {1}, pixel: {2}", chat.Id, Items[panel.LastVisibleIndex].Id, field.ActualHeight - (position.Y + container.ActualHeight)));
                         }
                         else
                         {
-                            Settings.Chats[chat.Id, ChatSetting.ReadInboxMaxId] = chat.LastReadInboxMessageId;
-                            Settings.Chats[chat.Id, ChatSetting.Index] = start;
-                            Settings.Chats.TryRemove(chat.Id, ChatSetting.Pixel, out double pixel);
+                            Settings.Chats[chat.Id, _threadId, ChatSetting.ReadInboxMaxId] = lastReadMessageId;
+                            Settings.Chats[chat.Id, _threadId, ChatSetting.Index] = start;
+                            Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Pixel, out double pixel);
 
                             Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Saving scrolling position, message: {1}, pixel: none", chat.Id, Items[panel.LastVisibleIndex].Id));
                         }
@@ -1994,24 +2062,27 @@ namespace Unigram.ViewModels
                     }
                     else
                     {
-                        Settings.Chats.TryRemove(chat.Id, ChatSetting.Index, out long index);
-                        Settings.Chats.TryRemove(chat.Id, ChatSetting.Pixel, out double pixel);
+                        Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.ReadInboxMaxId, out long _);
+                        Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Index, out long _);
+                        Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Pixel, out double _);
 
                         Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Removing scrolling position, as last item is chat.LastMessage", chat.Id));
                     }
                 }
                 else
                 {
-                    Settings.Chats.TryRemove(chat.Id, ChatSetting.Index, out long index);
-                    Settings.Chats.TryRemove(chat.Id, ChatSetting.Pixel, out double pixel);
+                    Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.ReadInboxMaxId, out long _);
+                    Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Index, out long _);
+                    Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Pixel, out double _);
 
                     Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Removing scrolling position, generic reason", chat.Id));
                 }
             }
             catch
             {
-                Settings.Chats.TryRemove(chat.Id, ChatSetting.Index, out long index);
-                Settings.Chats.TryRemove(chat.Id, ChatSetting.Pixel, out double pixel);
+                Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.ReadInboxMaxId, out long _);
+                Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Index, out long _);
+                Settings.Chats.TryRemove(chat.Id, _threadId, ChatSetting.Pixel, out double _);
 
                 Logs.Logger.Debug(Logs.Target.Chat, string.Format("{0} - Removing scrolling position, exception", chat.Id));
             }
@@ -2021,7 +2092,7 @@ namespace Unigram.ViewModels
 
         private void ShowSwitchInline(IDictionary<string, object> state)
         {
-            if (_type == DialogType.Normal && state.TryGet("switch_query", out string query) && state.TryGet("switch_bot", out int userId))
+            if (_type == DialogType.History && state.TryGet("switch_query", out string query) && state.TryGet("switch_bot", out int userId))
             {
                 state.Remove("switch_query");
                 state.Remove("switch_bot");
@@ -2039,7 +2110,7 @@ namespace Unigram.ViewModels
 
         private async void ShowReplyMarkup(Chat chat)
         {
-            if (chat.ReplyMarkupMessageId == 0 || _type != DialogType.Normal)
+            if (chat.ReplyMarkupMessageId == 0 || _type != DialogType.History)
             {
                 Delegate?.UpdateChatReplyMarkup(chat, null);
             }
@@ -2059,7 +2130,7 @@ namespace Unigram.ViewModels
 
         public async void ShowPinnedMessage(Chat chat)
         {
-            if (chat == null || chat.PinnedMessageId == 0 || _type != DialogType.Normal)
+            if (chat == null || chat.PinnedMessageId == 0 || _type != DialogType.History)
             {
                 Delegate?.UpdatePinnedMessage(chat, null, false);
             }
@@ -2088,8 +2159,19 @@ namespace Unigram.ViewModels
 
         private async void ShowDraftMessage(Chat chat)
         {
-            var draft = chat.DraftMessage;
-            if (draft == null || _type != DialogType.Normal)
+            DraftMessage draft;
+
+            var thread = _thread;
+            if (thread != null)
+            {
+                draft = thread.DraftMessage;
+            }
+            else
+            {
+                draft = chat.DraftMessage;
+            }
+
+            if (draft == null || (_type != DialogType.History && _type != DialogType.Thread))
             {
                 SetText(null as string);
                 ComposerHeader = null;
@@ -2212,7 +2294,7 @@ namespace Unigram.ViewModels
                 draft = new DraftMessage(reply, 0, new InputMessageText(formattedText, false, false));
             }
 
-            ProtoService.Send(new SetChatDraftMessage(_chat.Id, draft));
+            ProtoService.Send(new SetChatDraftMessage(_chat.Id, _threadId, draft));
         }
 
         #region Reply 
@@ -2328,12 +2410,12 @@ namespace Unigram.ViewModels
             await SendMessageAsync(args);
         }
 
-        public Task SendMessageAsync(FormattedText formattedText, SendMessageOptions options = null)
+        public Task SendMessageAsync(FormattedText formattedText, MessageSendOptions options = null)
         {
             return SendMessageAsync(formattedText.Text, formattedText.Entities, options);
         }
 
-        public async Task SendMessageAsync(string text, IList<TextEntity> entities = null, SendMessageOptions options = null)
+        public async Task SendMessageAsync(string text, IList<TextEntity> entities = null, MessageSendOptions options = null)
         {
             text = text.Replace('\v', '\n').Replace('\r', '\n');
 
@@ -2355,7 +2437,7 @@ namespace Unigram.ViewModels
 
             if (options == null)
             {
-                options = await PickSendMessageOptionsAsync();
+                options = await PickMessageSendOptionsAsync();
             }
 
             if (options == null)
@@ -2600,11 +2682,7 @@ namespace Unigram.ViewModels
             }
             else if (chat.Type is ChatTypePrivate || chat.Type is ChatTypeSecret)
             {
-                var user = ProtoService.GetUser(chat);
-                if (user != null)
-                {
-                    ProtoService.Send(new BlockUser(user.Id));
-                }
+                ProtoService.Send(new ToggleChatIsBlocked(chat.Id, true));
             }
 
             ProtoService.Send(new DeleteChatHistory(chat.Id, true, false));
@@ -2660,7 +2738,7 @@ namespace Unigram.ViewModels
                 {
                     if (updated.Type is ChatTypePrivate privata && check)
                     {
-                        await ProtoService.SendAsync(new BlockUser(privata.UserId));
+                        await ProtoService.SendAsync(new ToggleChatIsBlocked(updated.Id, true));
                     }
 
                     ProtoService.Send(new DeleteChatHistory(updated.Id, true, false));
@@ -2695,80 +2773,16 @@ namespace Unigram.ViewModels
 
         #region Call
 
-        public RelayCommand CallCommand { get; }
-        private async void CallExecute()
+        public RelayCommand<bool> CallCommand { get; }
+        private void CallExecute(bool video)
         {
-            //var user = With as TLUser;
-            //if (user == null)
-            //{
-            //    return;
-            //}
-
-            //try
-            //{
-            //    var coordinator = VoipCallCoordinator.GetDefault();
-            //    var result = await coordinator.ReserveCallResourcesAsync("Unigram.Tasks.VoIPCallTask");
-            //    if (result == VoipPhoneCallResourceReservationStatus.Success)
-            //    {
-            //        await VoIPConnection.Current.SendRequestAsync("voip.startCall", user);
-            //    }
-            //}
-            //catch
-            //{
-            //    await MessagePopup.ShowAsync("Something went wrong. Please, try to close and relaunch the app.", "Unigram", "OK");
-            //}
-
             var chat = _chat;
             if (chat == null)
             {
                 return;
             }
 
-            var user = CacheService.GetUser(chat);
-            if (user == null)
-            {
-                return;
-            }
-
-            var call = _voipService.ActiveCall;
-            if (call != null)
-            {
-                var callUser = CacheService.GetUser(call.UserId);
-                if (callUser != null && callUser.Id != user.Id)
-                {
-                    var confirm = await MessagePopup.ShowAsync(string.Format(Strings.Resources.VoipOngoingAlert, callUser.GetFullName(), user.GetFullName()), Strings.Resources.VoipOngoingAlertTitle, Strings.Resources.OK, Strings.Resources.Cancel);
-                    if (confirm == ContentDialogResult.Primary)
-                    {
-
-                    }
-                }
-                else
-                {
-                    _voipService.Show();
-                }
-
-                return;
-            }
-
-            var fullInfo = CacheService.GetUserFull(user.Id);
-            if (fullInfo != null && fullInfo.HasPrivateCalls)
-            {
-                await MessagePopup.ShowAsync(string.Format(Strings.Resources.CallNotAvailable, user.GetFullName()), Strings.Resources.VoipFailed, Strings.Resources.OK);
-                return;
-            }
-
-            var response = await ProtoService.SendAsync(new CreateCall(user.Id, new CallProtocol(true, true, 65, libtgvoip.VoIPControllerWrapper.GetConnectionMaxLayer(), new string[0])));
-            if (response is Error error)
-            {
-                if (error.Code == 400 && error.Message.Equals("PARTICIPANT_VERSION_OUTDATED"))
-                {
-                    await MessagePopup.ShowAsync(string.Format(Strings.Resources.VoipPeerOutdated, user.GetFullName()), Strings.Resources.AppName, Strings.Resources.OK);
-                }
-                else if (error.Code == 400 && error.Message.Equals("USER_PRIVACY_RESTRICTED"))
-                {
-                    await MessagePopup.ShowAsync(string.Format(Strings.Resources.CallNotAvailable, user.GetFullName()), Strings.Resources.AppName, Strings.Resources.OK);
-                }
-            }
+            _voipService.Start(chat.Id, video);
         }
 
         #endregion
@@ -2830,7 +2844,7 @@ namespace Unigram.ViewModels
             var user = CacheService.GetUser(privata.UserId);
             if (user.Type is UserTypeBot)
             {
-                await ProtoService.SendAsync(new UnblockUser(user.Id));
+                await ProtoService.SendAsync(new ToggleChatIsBlocked(chat.Id, false));
                 StartExecute();
             }
             else
@@ -2841,7 +2855,7 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                ProtoService.Send(new UnblockUser(privata.UserId));
+                ProtoService.Send(new ToggleChatIsBlocked(chat.Id, false));
             }
         }
 
@@ -3199,7 +3213,11 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                if (fullInfo.IsBlocked)
+                if (CacheService.IsRepliesChat(chat))
+                {
+                    ToggleMuteExecute(CacheService.GetNotificationSettingsMuteFor(chat) > 0);
+                }
+                else if (chat.IsBlocked)
                 {
                     UnblockExecute();
                 }
@@ -3216,7 +3234,7 @@ namespace Unigram.ViewModels
                     return;
                 }
 
-                if (group.Status is ChatMemberStatusLeft)
+                if (group.Status is ChatMemberStatusLeft || group.Status is ChatMemberStatusBanned)
                 {
                     // Delete and exit
                     ChatDeleteExecute();
@@ -3256,31 +3274,6 @@ namespace Unigram.ViewModels
                         ChatDeleteExecute();
                     }
                 }
-            }
-        }
-
-        #endregion
-
-        #region Linked chat
-
-        public RelayCommand DiscussCommand { get; }
-        private void DiscussExecute()
-        {
-            var chat = _chat;
-            if (chat == null)
-            {
-                return;
-            }
-
-            var full = CacheService.GetSupergroupFull(chat);
-            if (full == null)
-            {
-                return;
-            }
-
-            if (full.LinkedChatId != 0)
-            {
-                NavigationService.NavigateToChat(full.LinkedChatId);
             }
         }
 
@@ -3398,7 +3391,7 @@ namespace Unigram.ViewModels
                 var previousDate = Utils.UnixTimestampToDateTime(GetMessageDate(previous));
                 if (previousDate.Date != itemDate.Date)
                 {
-                    var service = new MessageViewModel(previous.ProtoService, previous.PlaybackService, previous.Delegate, new Message(0, previous.SenderUserId, previous.ChatId, null, previous.SchedulingState, previous.IsOutgoing, false, false, true, false, previous.IsChannelPost, false, previous.Date, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageHeaderDate(), null));
+                    var service = new MessageViewModel(previous.ProtoService, previous.PlaybackService, previous.Delegate, new Message(0, previous.SenderUserId, previous.SenderChatId, previous.ChatId, null, previous.SchedulingState, previous.IsOutgoing, false, false, true, false, false, false, previous.IsChannelPost, false, previous.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageHeaderDate(), null));
                     return service;
                 }
             }
@@ -3533,20 +3526,30 @@ namespace Unigram.ViewModels
         {
             var saved1 = message1.IsSaved();
             var saved2 = message2.IsSaved();
+
             if (saved1 && saved2)
             {
                 if (message1.ForwardInfo?.Origin is MessageForwardOriginUser fromUser1 && message2.ForwardInfo?.Origin is MessageForwardOriginUser fromUser2)
                 {
                     return fromUser1.SenderUserId == fromUser2.SenderUserId && message1.ForwardInfo.FromChatId == message2.ForwardInfo.FromChatId;
                 }
-                else if (message1.ForwardInfo?.Origin is MessageForwardOriginChannel post1 && message2.ForwardInfo?.Origin is MessageForwardOriginChannel post2)
+                else if (message1.ForwardInfo?.Origin is MessageForwardOriginChat fromChat1 && message2.ForwardInfo?.Origin is MessageForwardOriginChat fromChat2)
                 {
-                    return post1.ChatId == post2.ChatId && message1.ForwardInfo.FromChatId == message2.ForwardInfo.FromChatId;
+                    return fromChat1.SenderChatId == fromChat2.SenderChatId && message1.ForwardInfo.FromChatId == message2.ForwardInfo.FromChatId;
+                }
+                else if (message1.ForwardInfo?.Origin is MessageForwardOriginChannel fromChannel1 && message2.ForwardInfo?.Origin is MessageForwardOriginChannel fromChannel2)
+                {
+                    return fromChannel1.ChatId == fromChannel2.ChatId && message1.ForwardInfo.FromChatId == message2.ForwardInfo.FromChatId;
                 }
             }
             else if (saved1 || saved2)
             {
                 return false;
+            }
+
+            if (message1.SenderUserId == 0 || message2.SenderUserId == 0)
+            {
+                return message1.SenderChatId == message2.SenderChatId;
             }
 
             return message1.SenderUserId == message2.SenderUserId;
@@ -3597,9 +3600,11 @@ namespace Unigram.ViewModels
         Deleted
     }
 
+    [Flags]
     public enum DialogType
     {
-        Normal,
+        History,
+        Thread,
         ScheduledMessages,
         EventLog
     }

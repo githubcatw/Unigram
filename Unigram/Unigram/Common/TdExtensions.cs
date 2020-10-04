@@ -1,5 +1,4 @@
-﻿using libtgvoip;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -15,190 +14,18 @@ using Windows.UI.Xaml.Media;
 
 namespace Unigram.Common
 {
-    public static class TdBackground
-    {
-        public static BackgroundType FromUri(Uri uri)
-        {
-            var slug = uri.Segments.Last();
-            var query = uri.Query.ParseQueryString();
-
-            var split = slug.Split('-');
-            if (split.Length > 0 && int.TryParse(split[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int topColor))
-            {
-                if (split.Length > 1 && int.TryParse(split[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int bottomColor))
-                {
-                    query.TryGetValue("rotation", out string rotationKey);
-                    int.TryParse(rotationKey ?? string.Empty, out int rotation);
-
-                    return new BackgroundTypeFill(new BackgroundFillGradient(topColor, bottomColor, rotation));
-                }
-
-                return new BackgroundTypeFill(new BackgroundFillSolid(topColor));
-            }
-            else
-            {
-                query.TryGetValue("mode", out string modeKey);
-                query.TryGetValue("bg_color", out string bg_colorKey);
-
-                var modeSplit = modeKey?.ToLower().Split('+') ?? new string[0];
-                var bgSplit = bg_colorKey?.Split('-') ?? new string[0];
-
-                if (bgSplit.Length > 0 && int.TryParse(bgSplit[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int bgTopColor))
-                {
-                    BackgroundFill fill;
-                    if (bgSplit.Length > 1 && int.TryParse(bgSplit[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int bgBottomColor))
-                    {
-                        query.TryGetValue("rotation", out string rotationKey1);
-                        int.TryParse(rotationKey1 ?? string.Empty, out int rotation1);
-
-                        fill = new BackgroundFillGradient(bgTopColor, bgBottomColor, rotation1);
-                    }
-                    else
-                    {
-                        fill = new BackgroundFillSolid(bgTopColor);
-                    }
-
-                    query.TryGetValue("intensity", out string intensityKey);
-                    int.TryParse(intensityKey, out int intensity);
-
-                    return new BackgroundTypePattern(fill, intensity, modeSplit.Contains("motion"));
-                }
-                else
-                {
-                    return new BackgroundTypeWallpaper(modeSplit.Contains("blur"), modeSplit.Contains("motion"));
-                }
-            }
-        }
-
-        public static string ToString(Background background)
-        {
-            if (background.Type is BackgroundTypeFill typeFill)
-            {
-                if (typeFill.Fill is BackgroundFillSolid fillSolid)
-                {
-                    var color = fillSolid.Color.ToColor();
-                    return string.Format("{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
-                }
-                else if (typeFill.Fill is BackgroundFillGradient fillGradient)
-                {
-                    var topColor = fillGradient.TopColor.ToColor();
-                    var bottomColor = fillGradient.BottomColor.ToColor();
-
-                    return string.Format("{0:X2}{1:X2}{2:X2}-{3:X2}{4:X2}{5:X2}?rotation={6}", topColor.R, topColor.G, topColor.B, bottomColor.R, bottomColor.G, bottomColor.B, fillGradient.RotationAngle);
-                }
-            }
-            else if (background.Type is BackgroundTypePattern typePattern)
-            {
-                string builder = "?";
-                if (typePattern.Fill is BackgroundFillSolid fillSolid)
-                {
-                    var color = fillSolid.Color.ToColor();
-                    builder += string.Format("bg_color={0:X2}{1:X2}{2:X2}&", color.R, color.G, color.B);
-                }
-                else if (typePattern.Fill is BackgroundFillGradient fillGradient)
-                {
-                    var topColor = fillGradient.TopColor.ToColor();
-                    var bottomColor = fillGradient.BottomColor.ToColor();
-
-                    builder += string.Format("bg_color={0:X2}{1:X2}{2:X2}-{3:X2}{4:X2}{5:X2}&rotation={6}&", topColor.R, topColor.G, topColor.B, bottomColor.R, bottomColor.G, bottomColor.B, fillGradient.RotationAngle);
-                }
-
-                builder += $"intensity={typePattern.Intensity}&";
-
-                if (typePattern.IsMoving)
-                {
-                    builder += "mode=motion";
-                }
-
-                return background.Name + builder.TrimEnd('&');
-            }
-            else if (background.Type is BackgroundTypeWallpaper typeWallpaper)
-            {
-                string builder = string.Empty;
-
-                if (typeWallpaper.IsMoving)
-                {
-                    builder += "?mode=motion";
-                }
-
-                if (typeWallpaper.IsBlurred)
-                {
-                    if (builder.Length > 0)
-                    {
-                        builder += "+blur";
-                    }
-                    else
-                    {
-                        builder += "?mode=blur";
-                    }
-                }
-
-                return background.Name + builder;
-            }
-
-            return null;
-        }
-
-        public static LinearGradientBrush GetGradient(int topColor, int bottomColor, int angle)
-        {
-            return GetGradient(topColor.ToColor(), bottomColor.ToColor(), angle);
-        }
-
-        public static LinearGradientBrush GetGradient(Color topColor, Color bottomColor, int angle)
-        {
-            Point topPoint;
-            Point bottomPoint;
-
-            switch (angle)
-            {
-                case 0:
-                case 360:
-                    topPoint = new Point(0.5, 0);
-                    bottomPoint = new Point(0.5, 1);
-                    break;
-                case 45:
-                default:
-                    topPoint = new Point(1, 0);
-                    bottomPoint = new Point(0, 1);
-                    break;
-                case 90:
-                    topPoint = new Point(1, 0.5);
-                    bottomPoint = new Point(0, 0.5);
-                    break;
-                case 135:
-                    topPoint = new Point(1, 1);
-                    bottomPoint = new Point(0, 0);
-                    break;
-                case 180:
-                    topPoint = new Point(0.5, 1);
-                    bottomPoint = new Point(0.5, 0);
-                    break;
-                case 225:
-                    topPoint = new Point(0, 1);
-                    bottomPoint = new Point(1, 0);
-                    break;
-                case 270:
-                    topPoint = new Point(0, 0.5);
-                    bottomPoint = new Point(1, 0.5);
-                    break;
-                case 315:
-                    topPoint = new Point(0, 0);
-                    bottomPoint = new Point(1, 1);
-                    break;
-            }
-
-            var brush = new LinearGradientBrush();
-            brush.GradientStops.Add(new GradientStop { Color = topColor, Offset = 0 });
-            brush.GradientStops.Add(new GradientStop { Color = bottomColor, Offset = 1 });
-            brush.StartPoint = topPoint;
-            brush.EndPoint = bottomPoint;
-
-            return brush;
-        }
-    }
-
     public static class TdExtensions
     {
+        public static bool IsValidState(this Call call)
+        {
+            if (call == null || call.State is CallStateDiscarded || call.State is CallStateError)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         public static File InvalidFile()
         {
             return new File(0, 0, 0, new LocalFile(string.Empty, false, false, false, false, 0, 0, 0), new RemoteFile(string.Empty, string.Empty, false, false, 0));
@@ -269,6 +96,20 @@ namespace Unigram.Common
 
         #endregion
 
+        public static string ToOutcomeText(this MessageCall call, bool outgoing)
+        {
+            var missed = call.DiscardReason is CallDiscardReasonMissed || call.DiscardReason is CallDiscardReasonDeclined;
+
+            if (call.IsVideo)
+            {
+                return missed ? (outgoing ? Strings.Resources.CallMessageVideoOutgoingMissed : Strings.Resources.CallMessageVideoIncomingMissed) : (outgoing ? Strings.Resources.CallMessageVideoOutgoing : Strings.Resources.CallMessageVideoIncoming);
+            }
+            else
+            {
+                return missed ? (outgoing ? Strings.Resources.CallMessageOutgoingMissed : Strings.Resources.CallMessageIncomingMissed) : (outgoing ? Strings.Resources.CallMessageOutgoing : Strings.Resources.CallMessageIncoming);
+            }
+        }
+
         public static bool IsMoving(this Background background)
         {
             if (background?.Type is BackgroundTypePattern pattern)
@@ -337,18 +178,6 @@ namespace Unigram.Common
             }
 
             return false;
-        }
-
-        public static Endpoint ToEndpoint(this CallConnection connection)
-        {
-            return new Endpoint
-            {
-                id = connection.Id,
-                ipv4 = connection.Ip,
-                ipv6 = connection.Ipv6,
-                peerTag = connection.PeerTag.ToArray(),
-                port = (ushort)connection.Port
-            };
         }
 
         public static bool IsInstantGallery(this WebPage webPage)
@@ -518,7 +347,7 @@ namespace Unigram.Common
                 case MessageText text:
                     return text.WebPage?.Photo;
                 case MessageChatChangePhoto chatChangePhoto:
-                    return chatChangePhoto.Photo;
+                    return chatChangePhoto.Photo.ToPhoto();
                 default:
                     return null;
             }
@@ -765,50 +594,99 @@ namespace Unigram.Common
             }
         }
 
-        public static File GetThumbnail(this Message message)
+        public static Thumbnail GetThumbnail(this Message message)
         {
             switch (message.Content)
             {
                 case MessageAnimation animation:
-                    return animation.Animation.Thumbnail?.File;
+                    return animation.Animation.Thumbnail;
                 case MessageAudio audio:
-                    return audio.Audio.AudioValue;
+                    return audio.Audio.AlbumCoverThumbnail;
                 case MessageDocument document:
-                    return document.Document.Thumbnail?.File;
+                    return document.Document.Thumbnail;
                 case MessageGame game:
-                    return game.Game.Animation?.Thumbnail?.File;
+                    return game.Game.Animation?.Thumbnail;
                 case MessageSticker sticker:
-                    return sticker.Sticker.Thumbnail?.File;
+                    return sticker.Sticker.Thumbnail;
                 case MessageText text:
                     if (text.WebPage != null && text.WebPage.Animation != null)
                     {
-                        return text.WebPage.Animation.Thumbnail?.File;
+                        return text.WebPage.Animation.Thumbnail;
                     }
                     else if (text.WebPage != null && text.WebPage.Audio != null)
                     {
-                        return text.WebPage.Audio.AlbumCoverThumbnail?.File;
+                        return text.WebPage.Audio.AlbumCoverThumbnail;
                     }
                     else if (text.WebPage != null && text.WebPage.Document != null)
                     {
-                        return text.WebPage.Document.Thumbnail?.File;
+                        return text.WebPage.Document.Thumbnail;
                     }
                     else if (text.WebPage != null && text.WebPage.Sticker != null)
                     {
-                        return text.WebPage.Sticker.Thumbnail?.File;
+                        return text.WebPage.Sticker.Thumbnail;
                     }
                     else if (text.WebPage != null && text.WebPage.Video != null)
                     {
-                        return text.WebPage.Video.Thumbnail?.File;
+                        return text.WebPage.Video.Thumbnail;
                     }
                     else if (text.WebPage != null && text.WebPage.VideoNote != null)
                     {
-                        return text.WebPage.VideoNote.Thumbnail?.File;
+                        return text.WebPage.VideoNote.Thumbnail;
                     }
                     break;
                 case MessageVideo video:
-                    return video.Video.Thumbnail?.File;
+                    return video.Video.Thumbnail;
                 case MessageVideoNote videoNote:
-                    return videoNote.VideoNote.Thumbnail?.File;
+                    return videoNote.VideoNote.Thumbnail;
+            }
+
+            return null;
+        }
+
+        public static Minithumbnail GetMinithumbnail(this Message message)
+        {
+            switch (message.Content)
+            {
+                case MessagePhoto photo:
+                    return photo.Photo.Minithumbnail;
+                case MessageAnimation animation:
+                    return animation.Animation.Minithumbnail;
+                case MessageAudio audio:
+                    return audio.Audio.AlbumCoverMinithumbnail;
+                case MessageDocument document:
+                    return document.Document.Minithumbnail;
+                case MessageGame game:
+                    return game.Game.Animation?.Minithumbnail;
+                case MessageText text:
+                    if (text.WebPage != null && text.WebPage.Animation != null)
+                    {
+                        return text.WebPage.Animation.Minithumbnail;
+                    }
+                    else if (text.WebPage != null && text.WebPage.Audio != null)
+                    {
+                        return text.WebPage.Audio.AlbumCoverMinithumbnail;
+                    }
+                    else if (text.WebPage != null && text.WebPage.Document != null)
+                    {
+                        return text.WebPage.Document.Minithumbnail;
+                    }
+                    else if (text.WebPage != null && text.WebPage.Video != null)
+                    {
+                        return text.WebPage.Video.Minithumbnail;
+                    }
+                    else if (text.WebPage != null && text.WebPage.VideoNote != null)
+                    {
+                        return text.WebPage.VideoNote.Minithumbnail;
+                    }
+                    else if (text.WebPage != null && text.WebPage.Photo != null)
+                    {
+                        return text.WebPage.Photo.Minithumbnail;
+                    }
+                    break;
+                case MessageVideo video:
+                    return video.Video.Minithumbnail;
+                case MessageVideoNote videoNote:
+                    return videoNote.VideoNote.Minithumbnail;
             }
 
             return null;
@@ -851,9 +729,14 @@ namespace Unigram.Common
             return caption != null && !string.IsNullOrEmpty(caption.Text);
         }
 
+        public static Photo ToPhoto(this ChatPhotoInfo chatPhoto)
+        {
+            return new Photo(false, null, new PhotoSize[] { new PhotoSize("t", chatPhoto.Small, 160, 160, new int[0]), new PhotoSize("i", chatPhoto.Big, 640, 640, new int[0]) });
+        }
+
         public static Photo ToPhoto(this ChatPhoto chatPhoto)
         {
-            return new Photo(false, null, new PhotoSize[] { new PhotoSize("t", chatPhoto.Small, 160, 160), new PhotoSize("i", chatPhoto.Big, 640, 640) });
+            return new Photo(false, chatPhoto.Minithumbnail, chatPhoto.Sizes);
         }
 
         public static bool IsSimple(this WebPage webPage)
@@ -1164,7 +1047,11 @@ namespace Unigram.Common
             {
                 return message.ForwardInfo.FromChatId != 0;
             }
-            else if (message.ForwardInfo?.Origin is MessageForwardOriginChannel post)
+            else if (message.ForwardInfo?.Origin is MessageForwardOriginChat fromChat)
+            {
+                return message.ForwardInfo.FromChatId != 0;
+            }
+            else if (message.ForwardInfo?.Origin is MessageForwardOriginChannel fromChannel)
             {
                 return message.ForwardInfo.FromChatId != 0;
             }
@@ -1329,7 +1216,7 @@ namespace Unigram.Common
             return full;
         }
 
-        public static PhotoSize GetSmall(this UserProfilePhoto photo)
+        public static PhotoSize GetSmall(this ChatPhoto photo)
         {
             //var local = photo.Sizes.FirstOrDefault(x => string.Equals(x.Type, "t"));
             //if (local != null && (local.Photo.Local.IsDownloadingCompleted || local.Photo.Local.CanBeDownloaded))
@@ -1375,7 +1262,7 @@ namespace Unigram.Common
             return thumb;
         }
 
-        public static PhotoSize GetBig(this UserProfilePhoto photo)
+        public static PhotoSize GetBig(this ChatPhoto photo)
         {
             var local = photo.Sizes.FirstOrDefault(x => string.Equals(x.Type, "i"));
             if (local != null)
@@ -1960,8 +1847,25 @@ namespace Unigram.Common
 
 
 
+        public static bool UpdateFile(this ChatPhotoInfo photo, File file)
+        {
+            var any = false;
+            if (photo.Small.Id == file.Id)
+            {
+                photo.Small = file;
+                any = true;
+            }
 
-        public static bool UpdateFile(this UserProfilePhoto photo, File file)
+            if (photo.Big.Id == file.Id)
+            {
+                photo.Big = file;
+                any = true;
+            }
+
+            return any;
+        }
+
+        public static bool UpdateFile(this ChatPhoto photo, File file)
         {
             var any = false;
             foreach (var size in photo.Sizes)
@@ -1971,6 +1875,12 @@ namespace Unigram.Common
                     size.Photo = file;
                     any = true;
                 }
+            }
+
+            if (photo.Animation?.File.Id == file.Id)
+            {
+                photo.Animation.File = file;
+                any = true;
             }
 
             return any;
@@ -2167,6 +2077,188 @@ namespace Unigram.Common
         public static File GetLocalFile(string path)
         {
             return new File(0, 0, 0, new LocalFile(System.IO.Path.Combine(Windows.ApplicationModel.Package.Current.InstalledLocation.Path, path), false, false, false, true, 0, 0, 0), new RemoteFile(string.Empty, string.Empty, false, false, 0));
+        }
+    }
+
+    public static class TdBackground
+    {
+        public static BackgroundType FromUri(Uri uri)
+        {
+            var slug = uri.Segments.Last();
+            var query = uri.Query.ParseQueryString();
+
+            var split = slug.Split('-');
+            if (split.Length > 0 && split[0].Length == 6 && int.TryParse(split[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int topColor))
+            {
+                if (split.Length > 1 && split[1].Length == 6 && int.TryParse(split[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int bottomColor))
+                {
+                    query.TryGetValue("rotation", out string rotationKey);
+                    int.TryParse(rotationKey ?? string.Empty, out int rotation);
+
+                    return new BackgroundTypeFill(new BackgroundFillGradient(topColor, bottomColor, rotation));
+                }
+
+                return new BackgroundTypeFill(new BackgroundFillSolid(topColor));
+            }
+            else
+            {
+                query.TryGetValue("mode", out string modeKey);
+                query.TryGetValue("bg_color", out string bg_colorKey);
+
+                var modeSplit = modeKey?.ToLower().Split('+') ?? new string[0];
+                var bgSplit = bg_colorKey?.Split('-') ?? new string[0];
+
+                if (bgSplit.Length > 0 && int.TryParse(bgSplit[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int bgTopColor))
+                {
+                    BackgroundFill fill;
+                    if (bgSplit.Length > 1 && int.TryParse(bgSplit[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int bgBottomColor))
+                    {
+                        query.TryGetValue("rotation", out string rotationKey1);
+                        int.TryParse(rotationKey1 ?? string.Empty, out int rotation1);
+
+                        fill = new BackgroundFillGradient(bgTopColor, bgBottomColor, rotation1);
+                    }
+                    else
+                    {
+                        fill = new BackgroundFillSolid(bgTopColor);
+                    }
+
+                    query.TryGetValue("intensity", out string intensityKey);
+                    int.TryParse(intensityKey, out int intensity);
+
+                    return new BackgroundTypePattern(fill, intensity, modeSplit.Contains("motion"));
+                }
+                else
+                {
+                    return new BackgroundTypeWallpaper(modeSplit.Contains("blur"), modeSplit.Contains("motion"));
+                }
+            }
+        }
+
+        public static string ToString(Background background)
+        {
+            if (background.Type is BackgroundTypeFill typeFill)
+            {
+                if (typeFill.Fill is BackgroundFillSolid fillSolid)
+                {
+                    var color = fillSolid.Color.ToColor();
+                    return string.Format("{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
+                }
+                else if (typeFill.Fill is BackgroundFillGradient fillGradient)
+                {
+                    var topColor = fillGradient.TopColor.ToColor();
+                    var bottomColor = fillGradient.BottomColor.ToColor();
+
+                    return string.Format("{0:X2}{1:X2}{2:X2}-{3:X2}{4:X2}{5:X2}?rotation={6}", topColor.R, topColor.G, topColor.B, bottomColor.R, bottomColor.G, bottomColor.B, fillGradient.RotationAngle);
+                }
+            }
+            else if (background.Type is BackgroundTypePattern typePattern)
+            {
+                string builder = "?";
+                if (typePattern.Fill is BackgroundFillSolid fillSolid)
+                {
+                    var color = fillSolid.Color.ToColor();
+                    builder += string.Format("bg_color={0:X2}{1:X2}{2:X2}&", color.R, color.G, color.B);
+                }
+                else if (typePattern.Fill is BackgroundFillGradient fillGradient)
+                {
+                    var topColor = fillGradient.TopColor.ToColor();
+                    var bottomColor = fillGradient.BottomColor.ToColor();
+
+                    builder += string.Format("bg_color={0:X2}{1:X2}{2:X2}-{3:X2}{4:X2}{5:X2}&rotation={6}&", topColor.R, topColor.G, topColor.B, bottomColor.R, bottomColor.G, bottomColor.B, fillGradient.RotationAngle);
+                }
+
+                builder += $"intensity={typePattern.Intensity}&";
+
+                if (typePattern.IsMoving)
+                {
+                    builder += "mode=motion";
+                }
+
+                return background.Name + builder.TrimEnd('&');
+            }
+            else if (background.Type is BackgroundTypeWallpaper typeWallpaper)
+            {
+                string builder = string.Empty;
+
+                if (typeWallpaper.IsMoving)
+                {
+                    builder += "?mode=motion";
+                }
+
+                if (typeWallpaper.IsBlurred)
+                {
+                    if (builder.Length > 0)
+                    {
+                        builder += "+blur";
+                    }
+                    else
+                    {
+                        builder += "?mode=blur";
+                    }
+                }
+
+                return background.Name + builder;
+            }
+
+            return null;
+        }
+
+        public static LinearGradientBrush GetGradient(int topColor, int bottomColor, int angle)
+        {
+            return GetGradient(topColor.ToColor(), bottomColor.ToColor(), angle);
+        }
+
+        public static LinearGradientBrush GetGradient(Color topColor, Color bottomColor, int angle)
+        {
+            Point topPoint;
+            Point bottomPoint;
+
+            switch (angle)
+            {
+                case 0:
+                case 360:
+                    topPoint = new Point(0.5, 0);
+                    bottomPoint = new Point(0.5, 1);
+                    break;
+                case 45:
+                default:
+                    topPoint = new Point(1, 0);
+                    bottomPoint = new Point(0, 1);
+                    break;
+                case 90:
+                    topPoint = new Point(1, 0.5);
+                    bottomPoint = new Point(0, 0.5);
+                    break;
+                case 135:
+                    topPoint = new Point(1, 1);
+                    bottomPoint = new Point(0, 0);
+                    break;
+                case 180:
+                    topPoint = new Point(0.5, 1);
+                    bottomPoint = new Point(0.5, 0);
+                    break;
+                case 225:
+                    topPoint = new Point(0, 1);
+                    bottomPoint = new Point(1, 0);
+                    break;
+                case 270:
+                    topPoint = new Point(0, 0.5);
+                    bottomPoint = new Point(1, 0.5);
+                    break;
+                case 315:
+                    topPoint = new Point(0, 0);
+                    bottomPoint = new Point(1, 1);
+                    break;
+            }
+
+            var brush = new LinearGradientBrush();
+            brush.GradientStops.Add(new GradientStop { Color = topColor, Offset = 0 });
+            brush.GradientStops.Add(new GradientStop { Color = bottomColor, Offset = 1 });
+            brush.StartPoint = topPoint;
+            brush.EndPoint = bottomPoint;
+
+            return brush;
         }
     }
 }

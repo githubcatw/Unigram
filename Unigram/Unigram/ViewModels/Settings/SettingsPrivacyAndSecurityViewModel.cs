@@ -68,11 +68,11 @@ namespace Unigram.ViewModels.Settings
                 }
             });
 
-            ProtoService.Send(new GetBlockedUsers(0, 1), result =>
+            ProtoService.Send(new GetBlockedChats(0, 1), result =>
             {
-                if (result is Telegram.Td.Api.Users users)
+                if (result is Telegram.Td.Api.Chats chats)
                 {
-                    BeginOnUIThread(() => BlockedUsers = users.TotalCount);
+                    BeginOnUIThread(() => BlockedUsers = chats.TotalCount);
                 }
             });
 
@@ -163,6 +163,19 @@ namespace Unigram.ViewModels.Settings
             set
             {
                 SetSuggestContacts(value);
+            }
+        }
+
+        public bool IsArchiveAndMuteEnabled
+        {
+            get
+            {
+                return ProtoService.Options.ArchiveAndMuteNewChatsFromUnknownUsers;
+            }
+            set
+            {
+                ProtoService.Options.ArchiveAndMuteNewChatsFromUnknownUsers = value;
+                RaisePropertyChanged();
             }
         }
 

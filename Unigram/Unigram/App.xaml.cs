@@ -56,11 +56,7 @@ namespace Unigram
         {
             Locator.Configure(/*session*/);
 
-            if (SettingsService.Current.Appearance.RequestedTheme != ElementTheme.Default)
-            {
-                RequestedTheme = SettingsService.Current.Appearance.GetCalculatedApplicationTheme();
-            }
-
+            RequestedTheme = SettingsService.Current.Appearance.GetCalculatedApplicationTheme();
             InitializeComponent();
 
             try
@@ -167,7 +163,7 @@ namespace Unigram
 
         private void Window_Activated(object sender, WindowActivatedEventArgs e)
         {
-            HandleActivated(e.WindowActivationState != CoreWindowActivationState.Deactivated);
+            HandleActivated(Window.Current.CoreWindow.ActivationMode == CoreWindowActivationMode.ActivatedInForeground);
             SettingsService.Current.Appearance.UpdateTimer();
         }
 

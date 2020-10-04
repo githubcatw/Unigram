@@ -137,14 +137,14 @@ namespace Unigram.Controls.Messages
         {
             if (message.SchedulingState is MessageSchedulingStateSendAtDate sendAtDate)
             {
-                return (string.Format(Strings.Resources.MessageScheduledOn, DateTimeToFormatConverter.ConvertDayGrouping(Utils.UnixTimestampToDateTime(sendAtDate.SendDate))), null);
+                return (string.Format(Strings.Resources.MessageScheduledOn, BindConvert.DayGrouping(Utils.UnixTimestampToDateTime(sendAtDate.SendDate))), null);
             }
             else if (message.SchedulingState is MessageSchedulingStateSendWhenOnline)
             {
                 return (Strings.Resources.MessageScheduledUntilOnline, null);
             }
 
-            return (DateTimeToFormatConverter.ConvertDayGrouping(Utils.UnixTimestampToDateTime(message.Date)), null);
+            return (BindConvert.DayGrouping(Utils.UnixTimestampToDateTime(message.Date)), null);
         }
 
         #endregion
@@ -561,17 +561,23 @@ namespace Unigram.Controls.Messages
             var chat = message.GetChat();
             if (chat.Type is ChatTypeSupergroup supergroup && supergroup.IsChannel)
             {
-                content = Strings.Resources.ActionChannelChangedPhoto;
+                content = chatChangePhoto.Photo.Animation != null
+                    ? Strings.Resources.ActionChannelChangedVideo
+                    : Strings.Resources.ActionChannelChangedPhoto;
             }
             else
             {
                 if (message.IsOutgoing)
                 {
-                    content = Strings.Resources.ActionYouChangedPhoto;
+                    content = chatChangePhoto.Photo.Animation != null
+                        ? Strings.Resources.ActionYouChangedVideo
+                        : Strings.Resources.ActionYouChangedPhoto;
                 }
                 else
                 {
-                    content = ReplaceWithLink(Strings.Resources.ActionChangedPhoto, "un1", message.GetSenderUser(), ref entities);
+                    content = chatChangePhoto.Photo.Animation != null
+                        ? ReplaceWithLink(Strings.Resources.ActionChangedVideo, "un1", message.GetSenderUser(), ref entities)
+                        : ReplaceWithLink(Strings.Resources.ActionChangedPhoto, "un1", message.GetSenderUser(), ref entities);
                 }
             }
 

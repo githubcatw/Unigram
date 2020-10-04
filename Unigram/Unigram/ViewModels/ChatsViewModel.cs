@@ -34,6 +34,8 @@ namespace Unigram.ViewModels
 
             Items = new ItemsCollection(protoService, aggregator, this, chatList);
 
+            SearchFilters = new MvxObservableCollection<ISearchChatsFilter>();
+
             ChatPinCommand = new RelayCommand<Chat>(ChatPinExecute);
             ChatArchiveCommand = new RelayCommand<Chat>(ChatArchiveExecute);
             ChatMarkCommand = new RelayCommand<Chat>(ChatMarkExecute);
@@ -158,6 +160,8 @@ namespace Unigram.ViewModels
             }
         }
 
+        public MvxObservableCollection<ISearchChatsFilter> SearchFilters { get; private set; }
+
         private TopChatsCollection _topChats;
         public TopChatsCollection TopChats
         {
@@ -250,7 +254,7 @@ namespace Unigram.ViewModels
         {
             if (chat.UnreadCount > 0)
             {
-                ProtoService.Send(new ViewMessages(chat.Id, new[] { chat.LastMessage.Id }, true));
+                ProtoService.Send(new ViewMessages(chat.Id, 0, new[] { chat.LastMessage.Id }, true));
 
                 if (chat.UnreadMentionCount > 0)
                 {
@@ -278,7 +282,7 @@ namespace Unigram.ViewModels
                 {
                     if (chat.UnreadCount > 0)
                     {
-                        ProtoService.Send(new ViewMessages(chat.Id, new[] { chat.LastMessage.Id }, true));
+                        ProtoService.Send(new ViewMessages(chat.Id, 0, new[] { chat.LastMessage.Id }, true));
                     }
                     else if (chat.IsMarkedAsUnread)
                     {
@@ -386,9 +390,9 @@ namespace Unigram.ViewModels
                     }
                     else
                     {
-                        if (delete.Type is ChatTypePrivate privata && check)
+                        if (delete.Type is ChatTypePrivate && check)
                         {
-                            await ProtoService.SendAsync(new BlockUser(privata.UserId));
+                            await ProtoService.SendAsync(new ToggleChatIsBlocked(delete.Id, true));
                         }
 
                         ProtoService.Send(new DeleteChatHistory(delete.Id, true, false));

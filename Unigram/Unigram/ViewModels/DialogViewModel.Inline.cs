@@ -179,7 +179,7 @@ namespace Unigram.ViewModels
                 return;
             }
 
-            var options = await PickSendMessageOptionsAsync();
+            var options = await PickMessageSendOptionsAsync();
             if (options == null)
             {
                 return;
@@ -207,7 +207,7 @@ namespace Unigram.ViewModels
 
             var reply = GetReply(true);
 
-            var response = await ProtoService.SendAsync(new SendInlineQueryResultMessage(chat.Id, reply, options, queryId, queryResult.GetId(), false));
+            var response = await ProtoService.SendAsync(new SendInlineQueryResultMessage(chat.Id, _threadId, reply, options, queryId, queryResult.GetId(), false));
         }
 
         private User GetBot(MessageViewModel message)

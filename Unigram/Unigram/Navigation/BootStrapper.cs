@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Unigram.Common;
@@ -325,19 +324,7 @@ namespace Unigram.Navigation
             {
                 if (popup.Child is INavigablePage page)
                 {
-                    if (key == Windows.System.VirtualKey.Escape)
-                    {
-                        if (popup.Child is INavigatingPage navigating)
-                        {
-                            navigating.OnBackRequesting(args);
-                        }
-
-                        args.Handled = true;
-                    }
-                    else
-                    {
-                        page.OnBackRequested(args);
-                    }
+                    page.OnBackRequested(args);
 
                     if (handled = args.Handled)
                         return;

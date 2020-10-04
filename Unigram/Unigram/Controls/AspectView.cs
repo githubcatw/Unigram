@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Linq;
 using Telegram.Td.Api;
-using Unigram.Common;
-using Unigram.Entities;
 using Unigram.ViewModels;
 using Windows.Foundation;
 using Windows.UI.Xaml;
@@ -207,9 +205,9 @@ namespace Unigram.Controls
                     constraint = photo.Sizes.OrderByDescending(x => x.Width).FirstOrDefault();
                 }
             }
-            else if (constraint is UserProfilePhoto userProfilePhoto)
+            else if (constraint is ChatPhoto chatPhoto)
             {
-                constraint = userProfilePhoto.Sizes.OrderByDescending(x => x.Width).FirstOrDefault();
+                constraint = chatPhoto.Sizes.OrderByDescending(x => x.Width).FirstOrDefault();
             }
             else if (constraint is Sticker sticker)
             {

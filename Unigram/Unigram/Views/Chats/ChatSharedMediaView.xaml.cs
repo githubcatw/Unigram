@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
-using System.Numerics;
 using System.Reactive.Linq;
 using Telegram.Td.Api;
 using Unigram.Common;
@@ -17,7 +16,6 @@ using Unigram.ViewModels.Chats;
 using Unigram.ViewModels.Delegates;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
 
@@ -284,7 +282,7 @@ namespace Unigram.Views.Chats
             var element = sender as FrameworkElement;
             var message = element.Tag as Message;
 
-            var viewModel = new ChatGalleryViewModel(ViewModel.ProtoService, ViewModel.Aggregator, message.ChatId, message, true);
+            var viewModel = new ChatGalleryViewModel(ViewModel.ProtoService, ViewModel.Aggregator, message.ChatId, 0, message, true);
             await GalleryView.GetForCurrentView().ShowAsync(viewModel, () => element);
         }
 
@@ -449,7 +447,7 @@ namespace Unigram.Views.Chats
             }
             else if (message.Content is MessageHeaderDate && args.ItemContainer.ContentTemplateRoot is Border content && content.Child is TextBlock header)
             {
-                header.Text = DateTimeToFormatConverter.ConvertMonthGrouping(Utils.UnixTimestampToDateTime(message.Date));
+                header.Text = BindConvert.MonthGrouping(Utils.UnixTimestampToDateTime(message.Date));
             }
 
             if (args.ItemContainer.ContentTemplateRoot is FrameworkElement element)

@@ -458,7 +458,7 @@ namespace Unigram.Controls.Messages
             var missed = call.DiscardReason is CallDiscardReasonMissed || call.DiscardReason is CallDiscardReasonDeclined;
 
             TitleLabel.Text = GetFromLabel(message, title);
-            ServiceLabel.Text = missed ? (outgoing ? Strings.Resources.CallMessageOutgoingMissed : Strings.Resources.CallMessageIncomingMissed) : (outgoing ? Strings.Resources.CallMessageOutgoing : Strings.Resources.CallMessageIncoming);
+            ServiceLabel.Text = call.ToOutcomeText(message.IsOutgoing);
             MessageLabel.Text = string.Empty;
 
             return true;
@@ -509,14 +509,21 @@ namespace Unigram.Controls.Messages
                 ThumbRoot.Visibility = Visibility.Collapsed;
 
             TitleLabel.Text = GetFromLabel(message, title);
-            ServiceLabel.Text = Strings.Resources.AttachMusic;
+            //ServiceLabel.Text = Strings.Resources.AttachMusic;
             MessageLabel.Text = string.Empty;
 
-            //var document = documentMedia.Document as TLDocument;
-            //if (document != null)
-            //{
-            //    ServiceLabel.Text = document.Title;
-            //}
+
+            var performer = string.IsNullOrEmpty(audio.Audio.Performer) ? null : audio.Audio.Performer;
+            var audioTitle = string.IsNullOrEmpty(audio.Audio.Title) ? null : audio.Audio.Title;
+
+            if (performer == null || audioTitle == null)
+            {
+                ServiceLabel.Text = Strings.Resources.AttachMusic;
+            }
+            else
+            {
+                ServiceLabel.Text = $"\uD83C\uDFB5 {performer} - {audioTitle}";
+            }
 
             if (audio.Caption != null && !string.IsNullOrWhiteSpace(audio.Caption.Text))
             {
@@ -836,9 +843,9 @@ namespace Unigram.Controls.Messages
                 return title;
             }
 
-            if (message.IsChannelPost)
+            if (message.SenderChatId != 0)
             {
-                var chat = message.GetChat();
+                var chat = message.GetSenderChat();
                 if (chat != null)
                 {
                     return message.ProtoService.GetTitle(chat);
@@ -846,17 +853,10 @@ namespace Unigram.Controls.Messages
             }
             else if (message.IsSaved())
             {
-                if (message.ForwardInfo?.Origin is MessageForwardOriginUser fromUser)
+                var forward = message.ProtoService.GetTitle(message.ForwardInfo);
+                if (forward != null)
                 {
-                    return message.ProtoService.GetUser(fromUser.SenderUserId)?.GetFullName();
-                }
-                else if (message.ForwardInfo?.Origin is MessageForwardOriginChannel post)
-                {
-                    return message.ProtoService.GetTitle(message.ProtoService.GetChat(post.ChatId));
-                }
-                else if (message.ForwardInfo?.Origin is MessageForwardOriginHiddenUser fromHiddenUser)
-                {
-                    return fromHiddenUser.SenderName;
+                    return forward;
                 }
             }
 
@@ -963,10 +963,7 @@ namespace Unigram.Controls.Messages
             }
             else if (message.Content is MessageCall call)
             {
-                var outgoing = message.IsOutgoing;
-                var missed = call.DiscardReason is CallDiscardReasonMissed || call.DiscardReason is CallDiscardReasonDeclined;
-
-                return (missed ? (outgoing ? Strings.Resources.CallMessageOutgoingMissed : Strings.Resources.CallMessageIncomingMissed) : (outgoing ? Strings.Resources.CallMessageOutgoing : Strings.Resources.CallMessageIncoming));
+                return call.ToOutcomeText(message.IsOutgoing);
             }
             else if (message.Content is MessageUnsupported)
             {

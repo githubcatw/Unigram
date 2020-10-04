@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Td.Api;
 using Unigram.Navigation.Services;
-using Unigram.Services;
 using Unigram.ViewModels;
 using Unigram.Views;
 using Unigram.Views.Payments;
@@ -129,19 +128,35 @@ namespace Unigram.Common
             }
         }
 
-        public static void NavigateToChat(this INavigationService service, Chat chat, long? message = null, string accessToken = null, IDictionary<string, object> state = null, bool scheduled = false, bool force = true)
+        public static void NavigateToThread(this INavigationService service, Chat chat, long thread, long? message = null, IDictionary<string, object> state = null)
         {
             if (service is TLNavigationService serviceEx)
             {
-                serviceEx.NavigateToChat(chat, message, accessToken, state, scheduled, force);
+                serviceEx.NavigateToChat(chat, message, thread, state: state);
             }
         }
 
-        public static void NavigateToChat(this INavigationService service, long chatId, long? message = null, string accessToken = null, IDictionary<string, object> state = null, bool scheduled = false, bool force = true)
+        public static void NavigateToThread(this INavigationService service, long chatId, long thread, long? message = null, IDictionary<string, object> state = null)
         {
             if (service is TLNavigationService serviceEx)
             {
-                serviceEx.NavigateToChat(chatId, message, accessToken, state, scheduled, force);
+                serviceEx.NavigateToChat(chatId, message, thread, state: state);
+            }
+        }
+
+        public static void NavigateToChat(this INavigationService service, Chat chat, long? message = null, long? thread = null, string accessToken = null, IDictionary<string, object> state = null, bool scheduled = false, bool force = true)
+        {
+            if (service is TLNavigationService serviceEx)
+            {
+                serviceEx.NavigateToChat(chat, message, thread, accessToken, state, scheduled, force);
+            }
+        }
+
+        public static void NavigateToChat(this INavigationService service, long chatId, long? message = null, long? thread = null, string accessToken = null, IDictionary<string, object> state = null, bool scheduled = false, bool force = true)
+        {
+            if (service is TLNavigationService serviceEx)
+            {
+                serviceEx.NavigateToChat(chatId, message, thread, accessToken, state, scheduled, force);
             }
         }
 

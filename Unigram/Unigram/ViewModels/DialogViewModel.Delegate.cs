@@ -15,7 +15,6 @@ using Unigram.ViewModels.Delegates;
 using Unigram.ViewModels.Gallery;
 using Unigram.Views;
 using Unigram.Views.Popups;
-using Windows.Storage;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
@@ -226,7 +225,26 @@ namespace Unigram.ViewModels
 
         public async void OpenReply(MessageViewModel message)
         {
-            await LoadMessageSliceAsync(message.Id, message.ReplyToMessageId);
+            if (message.ReplyToMessageState == ReplyToMessageState.None)
+            {
+                if (message.ReplyInChatId == message.ChatId || message.ReplyInChatId == 0)
+                {
+                    await LoadMessageSliceAsync(message.Id, message.ReplyToMessageId);
+                }
+                else
+                {
+                    NavigationService.NavigateToChat(message.ReplyInChatId, message.ReplyToMessageId);
+                }
+            }
+        }
+
+        public async void OpenThread(MessageViewModel message)
+        {
+            var response = await ProtoService.SendAsync(new GetMessageThread(message.ChatId, message.Id));
+            if (response is MessageThreadInfo info)
+            {
+                NavigationService.NavigateToThread(message.ChatId, message.Id);
+            }
         }
 
 
@@ -303,9 +321,9 @@ namespace Unigram.ViewModels
             KeyboardButtonExecute(message, button);
         }
 
-        public void Call(MessageViewModel message)
+        public void Call(MessageViewModel message, bool video)
         {
-            CallCommand.Execute();
+            CallCommand.Execute(video);
         }
 
         public async void VotePoll(MessageViewModel message, IList<PollOption> options)
@@ -413,7 +431,7 @@ namespace Unigram.ViewModels
             }
         }
 
-        public void OpenChat(long chatId)
+        public void OpenChat(long chatId, bool profile = false)
         {
             var chat = ProtoService.GetChat(chatId);
             if (chat == null)
@@ -421,7 +439,14 @@ namespace Unigram.ViewModels
                 return;
             }
 
-            NavigationService.NavigateToChat(chat);
+            if (profile)
+            {
+                NavigationService.Navigate(typeof(ProfilePage), chat.Id);
+            }
+            else
+            {
+                NavigationService.NavigateToChat(chat);
+            }
         }
 
         public void OpenChat(long chatId, long messageId)
@@ -501,14 +526,14 @@ namespace Unigram.ViewModels
             else if (message.Content is MessageGame game && message.ReplyMarkup is ReplyMarkupInlineKeyboard inline)
             {
                 foreach (var row in inline.Rows)
-                foreach (var button in row)
-                {
-                    if (button.Type is InlineKeyboardButtonTypeCallbackGame)
+                    foreach (var button in row)
                     {
-                        KeyboardButtonExecute(message, button);
-                        return;
+                        if (button.Type is InlineKeyboardButtonTypeCallbackGame)
+                        {
+                            KeyboardButtonExecute(message, button);
+                            return;
+                        }
                     }
-                }
             }
 
             GalleryViewModelBase viewModel = null;
@@ -532,9 +557,9 @@ namespace Unigram.ViewModels
             {
                 if (viewModel == null)
                 {
-                    if ((message.Content is MessagePhoto || message.Content is MessageVideo) && !message.IsSecret())
+                    if ((message.Content is MessageAnimation || message.Content is MessagePhoto || message.Content is MessageVideo) && !message.IsSecret())
                     {
-                        viewModel = new ChatGalleryViewModel(ProtoService, Aggregator, message.ChatId, message.Get());
+                        viewModel = new ChatGalleryViewModel(ProtoService, Aggregator, message.ChatId, _threadId, message.Get());
                     }
                     else
                     {

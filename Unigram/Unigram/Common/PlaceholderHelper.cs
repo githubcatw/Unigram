@@ -27,7 +27,7 @@ namespace Unigram.Common
             Color.FromArgb(0xFF, 0xF2, 0x74, 0x9A),
         };
 
-        public static SolidColorBrush GetBrush(int i)
+        public static SolidColorBrush GetBrush(long i)
         {
             return new SolidColorBrush(_colors[Math.Abs(i % _colors.Length)]);
         }
@@ -218,9 +218,16 @@ namespace Unigram.Common
 
         public static ImageSource GetChat(IProtoService protoService, Chat chat, int side)
         {
-            if (chat.Type is ChatTypePrivate privata && protoService != null && protoService.IsSavedMessages(chat))
+            if (protoService != null)
             {
-                return GetSavedMessages(privata.UserId, side);
+                if (chat.Type is ChatTypePrivate privata && protoService.IsSavedMessages(chat))
+                {
+                    return GetSavedMessages(privata.UserId, side);
+                }
+                else if (protoService.IsRepliesChat(chat))
+                {
+                    return GetGlyph(Icons.Reply, 5, side);
+                }
             }
 
             var file = chat.Photo?.Small;

@@ -1,5 +1,4 @@
 ﻿using Unigram.Native;
-using Windows.ApplicationModel.Resources.Core;
 using Windows.Foundation.Metadata;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Media.Animation;
@@ -23,6 +22,12 @@ namespace Unigram.Common
         private static bool? _canUseViewports;
         public static bool CanUseViewports => (_canUseViewports = _canUseViewports ?? ApiInformation.IsEventPresent("Windows.UI.Xaml.FrameworkElement", "EffectiveViewportChanged")) ?? false;
 
+        private static bool? _canUseWindowManagement;
+        public static bool CanUseWindowManagement => (_canUseWindowManagement = _canUseWindowManagement ?? ApiInformation.IsTypePresent("Windows.UI.WindowManagement.DisplayRegion")) ?? false;
+
+        private static bool? _canUnconstrainFromBounds;
+        public static bool CanUnconstrainFromBounds => (_canUnconstrainFromBounds = _canUnconstrainFromBounds ?? ApiInformation.IsPropertyPresent("Windows.UI.Xaml.Controls.Primitives.Popup", "ShouldConstrainToRootBounds")) ?? false;
+
         private static bool? _isMediaSupported;
         public static bool IsMediaSupported => (_isMediaSupported = _isMediaSupported ?? NativeUtils.IsMediaSupported()) ?? true;
 
@@ -45,7 +50,7 @@ namespace Unigram.Common
         private static FlowDirection LoadFlowDirection()
         {
 #if DEBUG
-            var flowDirectionSetting = ResourceContext.GetForCurrentView().QualifierValues["LayoutDirection"];
+            var flowDirectionSetting = Windows.ApplicationModel.Resources.Core.ResourceContext.GetForCurrentView().QualifierValues["LayoutDirection"];
             return flowDirectionSetting == "RTL" ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
 #else
             return FlowDirection.LeftToRight;

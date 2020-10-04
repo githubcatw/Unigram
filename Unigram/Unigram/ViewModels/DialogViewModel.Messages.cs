@@ -9,7 +9,6 @@ using Telegram.Td.Api;
 using Unigram.Common;
 using Unigram.Controls;
 using Unigram.Converters;
-using Unigram.Services;
 using Unigram.Views;
 using Unigram.Views.Payments;
 using Unigram.Views.Popups;
@@ -304,7 +303,13 @@ namespace Unigram.ViewModels
                     var date = BindConvert.Current.DateTime(message.Date);
                     builder.AppendLine(string.Format("{0}, [{1} {2}]", title, BindConvert.Current.ShortDate.Format(date), BindConvert.Current.ShortTime.Format(date)));
 
-                    if (message.ForwardInfo?.Origin is MessageForwardOriginChannel forwardedPost)
+                    if (message.ForwardInfo?.Origin is MessageForwardOriginChat fromChat)
+                    {
+                        var from = ProtoService.GetChat(fromChat.SenderChatId);
+                        builder.AppendLine($"[{Strings.Resources.ForwardedMessage}]");
+                        builder.AppendLine($"[{Strings.Resources.From} {ProtoService.GetTitle(from)}]");
+                    }
+                    else if (message.ForwardInfo?.Origin is MessageForwardOriginChannel forwardedPost)
                     {
                         var from = ProtoService.GetChat(forwardedPost.ChatId);
                         builder.AppendLine($"[{Strings.Resources.ForwardedMessage}]");
@@ -684,27 +689,16 @@ namespace Unigram.ViewModels
                 return;
             }
 
-            var supergroup = CacheService.GetSupergroup(chat);
-            if (supergroup != null && string.IsNullOrEmpty(supergroup.Username))
+            var response = await ProtoService.SendAsync(new GetMessageLink(chat.Id, message.Id, false, _threadId != 0));
+            if (response is MessageLink link)
             {
-                var response = await ProtoService.SendAsync(new GetMessageLink(chat.Id, message.Id));
-                if (response is HttpUrl link)
-                {
-                    var dataPackage = new DataPackage();
-                    dataPackage.SetText(link.Url);
-                    ClipboardEx.TrySetContent(dataPackage);
+                var dataPackage = new DataPackage();
+                dataPackage.SetText(link.Link);
+                ClipboardEx.TrySetContent(dataPackage);
 
-                    await MessagePopup.ShowAsync(Strings.Resources.LinkCopiedPrivate, Strings.Resources.AppName, Strings.Resources.OK);
-                }
-            }
-            else
-            {
-                var response = await ProtoService.SendAsync(new GetPublicMessageLink(chat.Id, message.Id, false));
-                if (response is PublicMessageLink link)
+                if (!link.IsPublic)
                 {
-                    var dataPackage = new DataPackage();
-                    dataPackage.SetText(link.Link);
-                    ClipboardEx.TrySetContent(dataPackage);
+                    await MessagePopup.ShowAsync(Strings.Resources.LinkCopiedPrivate, Strings.Resources.AppName, Strings.Resources.OK);
                 }
             }
         }
@@ -776,6 +770,20 @@ namespace Unigram.ViewModels
             //        Logs.Log.Write("messages.getMessageEditData error " + response.Error);
             //    });
             //}
+        }
+
+        #endregion
+
+        #region View thread
+
+        public RelayCommand<MessageViewModel> MessageThreadCommand { get; }
+        private async void MessageThreadExecute(MessageViewModel message)
+        {
+            var response = await ProtoService.SendAsync(new GetMessageThread(message.ChatId, message.Id));
+            if (response is MessageThreadInfo info)
+            {
+                NavigationService.NavigateToThread(message.ChatId, message.Id, message.Id);
+            }
         }
 
         #endregion
@@ -901,7 +909,7 @@ namespace Unigram.ViewModels
         public RelayCommand<MessageViewModel> MessageRescheduleCommand { get; }
         private async void MessageRescheduleExecute(MessageViewModel message)
         {
-            var options = await PickSendMessageOptionsAsync(true);
+            var options = await PickMessageSendOptionsAsync(true);
             if (options?.SchedulingState == null)
             {
                 return;
@@ -1057,7 +1065,7 @@ namespace Unigram.ViewModels
                     var bot = GetBot(message);
                     if (bot != null)
                     {
-                        InformativeMessage = _messageFactory.Create(this, new Message(0, bot.Id, 0, null, null, false, false, false, true, false, false, false, 0, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageText(new FormattedText(Strings.Resources.Loading, new TextEntity[0]), null), null));
+                        InformativeMessage = _messageFactory.Create(this, new Message(0, bot.Id, 0, 0, null, null, false, false, false, true, false, false, false, false, false, 0, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageText(new FormattedText(Strings.Resources.Loading, new TextEntity[0]), null), null));
                     }
 
                     var response = await ProtoService.SendAsync(new GetCallbackQueryAnswer(chat.Id, message.Id, new CallbackQueryPayloadData(callback.Data)));
@@ -1078,7 +1086,7 @@ namespace Unigram.ViewModels
                                     return;
                                 }
 
-                                InformativeMessage = _messageFactory.Create(this, new Message(0, bot.Id, 0, null, null, false, false, false, true, false, false, false, 0, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageText(new FormattedText(answer.Text, new TextEntity[0]), null), null));
+                                InformativeMessage = _messageFactory.Create(this, new Message(0, bot.Id, 0, 0, null, null, false, false, false, true, false, false, false, false, false, 0, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageText(new FormattedText(answer.Text, new TextEntity[0]), null), null));
                             }
                         }
                         else if (!string.IsNullOrEmpty(answer.Url))

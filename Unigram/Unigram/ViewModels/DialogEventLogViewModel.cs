@@ -17,7 +17,7 @@ namespace Unigram.ViewModels
 {
     public class DialogEventLogViewModel : DialogViewModel
     {
-        public DialogEventLogViewModel(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoIPService voipService, INetworkService networkService, IMessageFactory messageFactory)
+        public DialogEventLogViewModel(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoipService voipService, INetworkService networkService, IMessageFactory messageFactory)
             : base(protoService, cacheService, settingsService, aggregator, locationService, pushService, playbackService, voipService, networkService, messageFactory)
         {
             HelpCommand = new RelayCommand(HelpExecute);
@@ -144,7 +144,7 @@ namespace Unigram.ViewModels
                     var target = replied.FirstOrDefault();
                     if (target != null)
                     {
-                        replied.Insert(0, _messageFactory.Create(this, new Message(0, target.SenderUserId, target.ChatId, null, target.SchedulingState, target.IsOutgoing, false, false, true, false, target.IsChannelPost, false, target.Date, 0, null, 0, 0, 0, 0, string.Empty, 0, 0, string.Empty, new MessageHeaderDate(), null)));
+                        replied.Insert(0, _messageFactory.Create(this, new Message(0, target.SenderUserId, target.SenderChatId, target.ChatId, null, target.SchedulingState, target.IsOutgoing, false, false, true, false, false, false, target.IsChannelPost, false, target.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, new MessageHeaderDate(), null)));
                     }
 
                     Items.ReplaceWith(replied);
@@ -254,7 +254,7 @@ namespace Unigram.ViewModels
                 }
             }
 
-            return new Message(chatEvent.Id, userId, chatId, null, null, false, false, false, false, false, isChannel, false, chatEvent.Date, 0, null, 0, 0, 0.0d, 0, string.Empty, 0, 0, string.Empty, null, null);
+            return new Message(chatEvent.Id, userId, 0, chatId, null, null, false, false, false, false, false, false, false, isChannel, false, chatEvent.Date, 0, null, null, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, null, null);
         }
 
         private MessageViewModel GetMessage(long chatId, bool isChannel, ChatEvent chatEvent, bool child = false)
@@ -622,7 +622,7 @@ namespace Unigram.ViewModels
             {
                 var entities = new List<TextEntity>();
 
-                var whoUser =  CacheService.GetUser(memberPromoted.UserId);
+                var whoUser = CacheService.GetUser(memberPromoted.UserId);
                 var str = memberPromoted.NewStatus is ChatMemberStatusCreator
                     ? Strings.Resources.EventLogChangedOwnership
                     : Strings.Resources.EventLogPromoted;
@@ -714,6 +714,10 @@ namespace Unigram.ViewModels
                 }
                 if (!channel)
                 {
+                    if (o.IsAnonymous != n.IsAnonymous)
+                    {
+                        AppendChange(n.IsAnonymous, Strings.Resources.EventLogPromotedSendAnonymously);
+                    }
                     if (o.CanRestrictMembers != n.CanRestrictMembers)
                     {
                         AppendChange(n.CanRestrictMembers, Strings.Resources.EventLogPromotedBanUsers);

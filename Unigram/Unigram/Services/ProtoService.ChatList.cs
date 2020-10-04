@@ -99,7 +99,7 @@ namespace Unigram.Services
             }
 
             Monitor.Exit(_chatList);
-            return new Chats(result);
+            return new Chats(0, result);
         }
 
         private struct OrderedChat : IComparable<OrderedChat>
@@ -142,7 +142,7 @@ namespace Unigram.Services
         }
     }
 
-    class NewDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TValue: new()
+    class NewDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TValue : new()
     {
         public new TValue this[TKey key]
         {
