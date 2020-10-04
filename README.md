@@ -1,23 +1,23 @@
 <p align="center">
-  <a href="https://www.microsoft.com/store/apps/9n97zckpd60q">
-    <img src="/Unigram/Unigram/Assets/Logos/StoreLogo.scale-200.png" width=80 height=80>
-  </a>
+  <img src="/Unigram/Unigram/Assets/Logos/StoreLogo.scale-200.png" width=80 height=80>
 
-  <h3 align="center">Unigram</h3>
+  <h3 align="center">Unigram X</h3>
 
   <p align="center">
     The Telegram client optimised for the Windows 10 platform.
+  <!--
     <br>
     <br>
     <a href="https://www.microsoft.com/store/apps/9n97zckpd60q">Download</a>
     &middot;
     <a href="https://t.me/unigraminsiders">Insiders Group</a>
+-->
   </p>
 </p>
 
 <br>
 
-Thanks to the [Universal Windows Platform](https://docs.microsoft.com/en-us/windows/uwp/get-started/whats-a-uwp), Unigram can run on any Windows 10 device (PC, Xbox One, Holo Lens and Surface Hub), integrated with almost all the new Windows features, it provides a seamless and consistent user experience.
+Thanks to the [Universal Windows Platform](https://docs.microsoft.com/en-us/windows/uwp/get-started/whats-a-uwp), Unigram X can run on any Windows 10 device (PC, Xbox One, Holo Lens and Surface Hub), integrated with almost all the new Windows features, it provides a seamless and consistent user experience.
 
 ## Table of contents
 - [Features](#features)
@@ -52,6 +52,9 @@ Thanks to the [Universal Windows Platform](https://docs.microsoft.com/en-us/wind
 - Channel statistics for big channels
 - Full support of Windows 10 notifications and Action Centre (reply to a message or mark it as read without opening the app)
 - Accessibility for visually impaired people
+
+<a name="new_features"></a>
+## Extra features not present in Unigram
 
 
 <a name="contributing"></a>
