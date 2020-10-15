@@ -259,7 +259,7 @@ namespace Unigram.Controls.Messages
 
         public void UpdateMessageReply(MessageViewModel message)
         {
-            if (Reply == null && message.ReplyToMessageId != 0)
+            if (Reply == null && message.ReplyToMessageId != 0 && message.ReplyToMessageState != ReplyToMessageState.Hidden)
             {
                 FindName("Reply");
             }
@@ -540,7 +540,7 @@ namespace Unigram.Controls.Messages
                 }
 
                 paragraph.Visibility = Visibility.Collapsed;
-                parent.Visibility = message.ReplyToMessageId != 0 ? Visibility.Visible : Visibility.Collapsed;
+                parent.Visibility = (message.ReplyToMessageId != 0 && message.ReplyToMessageState != ReplyToMessageState.Hidden) ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 
@@ -664,7 +664,7 @@ namespace Unigram.Controls.Messages
 
         public void UpdateMessageContentOpened(MessageViewModel message)
         {
-            if (Media.Child is IContentWithFile content && content.IsValid(message.Content, true))
+            if (Media.Child is IContentWithFile content && content.IsValid(message.GeneratedContent ?? message.Content, true))
             {
                 content.UpdateMessageContentOpened(message);
             }
@@ -702,7 +702,7 @@ namespace Unigram.Controls.Messages
                 {
                     top = 4;
                 }
-                if ((message.ForwardInfo != null && !message.IsSaved()) || message.ViaBotUserId != 0 || message.ReplyToMessageId != 0 || message.IsChannelPost)
+                if ((message.ForwardInfo != null && !message.IsSaved()) || message.ViaBotUserId != 0 || (message.ReplyToMessageId != 0 && message.ReplyToMessageState != ReplyToMessageState.Hidden) || message.IsChannelPost)
                 {
                     top = 4;
                 }
@@ -1174,7 +1174,7 @@ namespace Unigram.Controls.Messages
             if (AdjustEmojis(span, text))
             {
                 Message.FlowDirection = FlowDirection.LeftToRight;
-                adjust = message.ReplyToMessageId == 0 && message.Content is MessageText;
+                adjust = (message.ReplyToMessageId == 0 || message.ReplyToMessageState == ReplyToMessageState.Hidden) && message.Content is MessageText;
             }
             else if (ApiInfo.FlowDirection == FlowDirection.LeftToRight && MessageHelper.IsAnyCharacterRightToLeft(text))
             {
@@ -1321,7 +1321,9 @@ namespace Unigram.Controls.Messages
             {
                 var footerWidth = Footer.ActualWidth - 5;
 
-                var width = Message.ActualWidth;
+                // For some reason ActualWidth isn't reporting the correct value:
+                // it seems instead to report the width of the inner text.
+                var width = Message.RenderSize.Width;
                 var rect = Message.ContentEnd.GetCharacterRect(LogicalDirection.Forward);
 
                 var diff = width - rect.Right;

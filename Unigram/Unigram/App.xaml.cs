@@ -81,6 +81,10 @@ namespace Unigram
                 {
                     args.Handled = true;
                 }
+                else
+                {
+                    Client.Execute(new AddLogMessage(1, "Unhandled exception:\n" + args.Exception.ToString()));
+                }
 
                 //try
                 //{
@@ -118,7 +122,7 @@ namespace Unigram
 
         protected override WindowContext CreateWindowWrapper(Window window)
         {
-            return new TLWindowContext(window, 0);
+            return new TLWindowContext(window, ApplicationView.GetApplicationViewIdForWindow(window.CoreWindow));
         }
 
         private void Inactivity_Detected(object sender, EventArgs e)
@@ -273,11 +277,6 @@ namespace Unigram
                     }
 
                     await service.SendAsync(new ProcessPushNotification(notification.Content));
-
-                    foreach (var item in TLContainer.Current.ResolveAll<IProtoService>())
-                    {
-                        await item.SendAsync(new Close());
-                    }
                 }
 
                 deferral.Complete();
@@ -309,8 +308,6 @@ namespace Unigram
                 Window.Current.Activated += Window_Activated;
                 Window.Current.VisibilityChanged -= Window_VisibilityChanged;
                 Window.Current.VisibilityChanged += Window_VisibilityChanged;
-
-                TLWindowContext.GetForCurrentView().UpdateTitleBar();
             }
 
             return base.OnInitializeAsync(args);
@@ -355,7 +352,6 @@ namespace Unigram
             }
 
             TLWindowContext.GetForCurrentView().SetActivatedArgs(args, navService);
-            TLWindowContext.GetForCurrentView().UpdateTitleBar();
 
             Window.Current.Activated -= Window_Activated;
             Window.Current.Activated += Window_Activated;

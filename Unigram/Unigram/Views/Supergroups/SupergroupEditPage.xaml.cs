@@ -57,10 +57,9 @@ namespace Unigram.Views.Supergroups
             picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
             picker.FileTypeFilter.AddRange(Constants.MediaTypes);
 
-            var file = await picker.PickSingleFileAsync();
-            if (file != null)
+            var media = await picker.PickSingleMediaAsync();
+            if (media != null)
             {
-                var media = await StorageMedia.CreateAsync(file);
                 var dialog = new EditMediaPopup(media, ImageCropperMask.Ellipse);
 
                 var confirm = await dialog.ShowAsync();
@@ -154,7 +153,7 @@ namespace Unigram.Views.Supergroups
             ChatLinked.Badge = group.HasLinkedChat ? string.Empty : Strings.Resources.DiscussionInfo;
 
             Permissions.Badge = string.Format("{0}/{1}", chat.Permissions.Count(), chat.Permissions.Total());
-            Permissions.Visibility = group.IsChannel ? Visibility.Collapsed : Visibility.Visible;
+            Permissions.Visibility = group.IsChannel || !group.CanRestrictMembers() ? Visibility.Collapsed : Visibility.Visible;
             Blacklist.Visibility = group.IsChannel ? Visibility.Visible : Visibility.Collapsed;
 
             DeletePanel.Visibility = group.Status is ChatMemberStatusCreator ? Visibility.Visible : Visibility.Collapsed;

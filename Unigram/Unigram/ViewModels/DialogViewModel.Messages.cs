@@ -1473,12 +1473,20 @@ namespace Unigram.ViewModels
                 {
                     var first = dialog.SelectedDates.FirstOrDefault();
                     var offset = first.Date.ToTimestamp();
+
                     await LoadDateSliceAsync(offset);
                 }
             }
             else if (message.Content is MessagePinMessage pinMessage && pinMessage.MessageId != 0)
             {
                 await LoadMessageSliceAsync(null, pinMessage.MessageId);
+            }
+            else if (message.Content is MessageChatEvent chatEvent)
+            {
+                if (chatEvent.Action is ChatEventStickerSetChanged stickerSetChanged && stickerSetChanged.NewStickerSetId != 0)
+                {
+                    await StickerSetPopup.GetForCurrentView().ShowAsync(stickerSetChanged.NewStickerSetId);
+                }
             }
         }
 

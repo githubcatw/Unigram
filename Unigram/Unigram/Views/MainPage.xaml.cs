@@ -110,16 +110,10 @@ namespace Unigram.Views
             InputPane.GetForCurrentView().Showing += (s, args) => args.EnsuredFocusedElementInView = true;
 
             var updateShadow = DropShadowEx.Attach(UpdateShadow, 20, 0.25f);
-            UpdateShadow.SizeChanged += (s, args) =>
-            {
-                updateShadow.Size = args.NewSize.ToVector2();
-            };
+            updateShadow.RelativeSizeAdjustment = Vector2.One;
 
             var folderShadow = DropShadowEx.Attach(FolderShadow, 20, 0.25f);
-            FolderShadow.SizeChanged += (s, args) =>
-            {
-                folderShadow.Size = args.NewSize.ToVector2();
-            };
+            folderShadow.RelativeSizeAdjustment = Vector2.One;
 
             if (ApiInformation.IsEnumNamedValuePresent("Windows.UI.Xaml.Controls.Primitives.FlyoutPlacementMode", "BottomEdgeAlignedRight"))
             {
@@ -172,6 +166,9 @@ namespace Unigram.Views
             //TitleBarrr.Visibility = sender.IsVisible ? Visibility.Visible : Visibility.Collapsed;
             //TitleBarrr.Height = sender.Height;
             TitleBarrr.ColumnDefinitions[0].Width = new GridLength(Math.Max(sender.SystemOverlayLeftInset, 6), GridUnitType.Pixel);
+            TitleBarrr.ColumnDefinitions[2].Width = new GridLength(Math.Max(sender.SystemOverlayRightInset, 6), GridUnitType.Pixel);
+
+            StateLabel.FlowDirection = sender.SystemOverlayLeftInset > 0 ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
 
             sender.IsVisibleChanged += CoreTitleBar_LayoutMetricsChanged;
             sender.LayoutMetricsChanged += CoreTitleBar_LayoutMetricsChanged;
@@ -182,6 +179,9 @@ namespace Unigram.Views
             //TitleBarrr.Visibility = sender.IsVisible ? Visibility.Visible : Visibility.Collapsed;
             //TitleBarrr.Height = sender.Height;
             TitleBarrr.ColumnDefinitions[0].Width = new GridLength(Math.Max(sender.SystemOverlayLeftInset, 6), GridUnitType.Pixel);
+            TitleBarrr.ColumnDefinitions[2].Width = new GridLength(Math.Max(sender.SystemOverlayRightInset, 6), GridUnitType.Pixel);
+
+            StateLabel.FlowDirection = sender.SystemOverlayLeftInset > 0 ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
         }
 
         private void InitializeLocalization()
@@ -492,20 +492,20 @@ namespace Unigram.Views
 
         private void ShowState(string text)
         {
-            Status.IsIndeterminate = true;
-            StatusLabel.Text = text;
+            State.IsIndeterminate = true;
+            StateLabel.Text = text;
 
-            var peer = FrameworkElementAutomationPeer.FromElement(StatusLabel);
+            var peer = FrameworkElementAutomationPeer.FromElement(StateLabel);
             peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
         }
 
         private void HideStatus()
         {
-            Status.IsIndeterminate = false;
+            State.IsIndeterminate = false;
 #if DEBUG && !MOCKUP
-            StatusLabel.Text = Strings.Resources.AppName;
+            StateLabel.Text = Strings.Resources.AppName;
 #else
-            StatusLabel.Text = "Unigram";
+            StateLabel.Text = "Unigram";
 #endif
         }
 
@@ -1330,7 +1330,7 @@ namespace Unigram.Views
 
                 SetTitleBarVisibility(Visibility.Visible);
                 Header.Visibility = Visibility.Visible;
-                StatusLabel.Visibility = Visibility.Visible;
+                StateLabel.Visibility = Visibility.Visible;
             }
             else
             {
@@ -1350,7 +1350,7 @@ namespace Unigram.Views
 
                 SetTitleBarVisibility(MasterDetail.NavigationService.CurrentPageType == typeof(BlankPage) ? Visibility.Collapsed : Visibility.Visible);
                 Header.Visibility = MasterDetail.CurrentState == MasterDetailState.Expanded ? Visibility.Visible : Visibility.Collapsed;
-                StatusLabel.Visibility = MasterDetail.CurrentState == MasterDetailState.Expanded ? Visibility.Visible : Visibility.Collapsed;
+                StateLabel.Visibility = MasterDetail.CurrentState == MasterDetailState.Expanded ? Visibility.Visible : Visibility.Collapsed;
             }
 
             UpdatePaneToggleButtonVisibility();
@@ -1893,8 +1893,29 @@ namespace Unigram.Views
             ViewModel.Settings.Results.Clear();
         }
 
-        private void Search_KeyDown(object sender, KeyRoutedEventArgs e)
+        private async void Search_KeyDown(object sender, KeyRoutedEventArgs e)
         {
+            if (rpMasterTitlebar.SelectedIndex == 0 && e.Key == Windows.System.VirtualKey.Back)
+            {
+                if (SearchField.SelectionStart == 0 && SearchField.SelectionLength == 0)
+                {
+                    if (ViewModel.Chats.SearchFilters?.Count > 0)
+                    {
+                        e.Handled = true;
+                        ViewModel.Chats.SearchFilters.RemoveAt(ViewModel.Chats.SearchFilters.Count - 1);
+
+                        var items = ViewModel.Chats.Search = new SearchChatsCollection(ViewModel.ProtoService, SearchField.Text, ViewModel.Chats.SearchFilters, FolderPanel.Visibility == Visibility.Collapsed ? null : new ChatListArchive());
+                        await items.LoadMoreItemsAsync(0);
+                        await items.LoadMoreItemsAsync(1);
+                        await items.LoadMoreItemsAsync(2);
+                        await items.LoadMoreItemsAsync(3);
+                        await items.LoadMoreItemsAsync(4);
+
+                        return;
+                    }
+                }
+            }
+
             var activePanel = rpMasterTitlebar.SelectedIndex == 0 ? DialogsPanel : ContactsPanel;
             var activeList = rpMasterTitlebar.SelectedIndex == 0 ? DialogsSearchListView : ContactsSearchListView;
             var activeResults = rpMasterTitlebar.SelectedIndex == 0 ? ChatsResults : ContactsResults;
@@ -1996,6 +2017,8 @@ namespace Unigram.Views
                     var grid = content.Children[1] as Grid;
 
                     var title = grid.Children[0] as TextBlock;
+                    title.Style = App.Current.Resources[result?.Chat?.Type is ChatTypeSecret ? "SecretBodyTextBlockStyle" : "BodyTextBlockStyle"] as Style;
+
                     if (result.Chat != null)
                     {
                         title.Text = ViewModel.ProtoService.GetTitle(result.Chat);
@@ -2025,7 +2048,7 @@ namespace Unigram.Views
                 else if (args.Phase == 1)
                 {
                     var subtitle = content.Children[2] as TextBlock;
-                    if (result.User != null || result.Chat != null && result.Chat.Type is ChatTypePrivate privata)
+                    if (result.User != null || result.Chat != null && (result.Chat.Type is ChatTypePrivate privata || result.Chat.Type is ChatTypeSecret))
                     {
                         var user = result.User ?? ViewModel.ProtoService.GetUser(result.Chat);
                         if (result.IsPublic)

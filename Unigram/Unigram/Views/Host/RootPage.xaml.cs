@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Geometry;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -9,13 +11,19 @@ using Unigram.Controls;
 using Unigram.Navigation;
 using Unigram.Navigation.Services;
 using Unigram.Services;
+using Unigram.Services.Settings;
 using Unigram.ViewModels;
 using Unigram.Views.SignIn;
 using Windows.Foundation;
+using Windows.Foundation.Metadata;
+using Windows.UI.Composition;
+using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
 
 namespace Unigram.Views.Host
@@ -73,10 +81,7 @@ namespace Unigram.Views.Host
             Navigation.Content = _navigationService.Frame;
 
             var shadow = DropShadowEx.Attach(ThemeShadow, 20, 0.25f);
-            ThemeShadow.SizeChanged += (s, args) =>
-            {
-                shadow.Size = args.NewSize.ToVector2();
-            };
+            shadow.RelativeSizeAdjustment = Vector2.One;
         }
 
         public void UpdateComponent()
@@ -113,6 +118,7 @@ namespace Unigram.Views.Host
                 Destroy(_navigationService);
             }
 
+            Navigation.IsPaneOpen = false;
             Navigation.SetTopPadding(new Thickness());
 
             var service = WindowContext.GetForCurrentView().NavigationServices.GetByFrameId($"{session.Id}") as NavigationService;
@@ -282,6 +288,7 @@ namespace Unigram.Views.Host
                 args.ItemContainer = new ListViewItem();
                 args.ItemContainer.Style = NavigationViewList.ItemContainerStyle;
                 args.ItemContainer.ContentTemplate = Resources["SessionItemTemplate"] as DataTemplate;
+                args.ItemContainer.ContextRequested += OnContextRequested;
             }
             else if (args.Item is RootDestination destination)
             {
@@ -292,10 +299,36 @@ namespace Unigram.Views.Host
                 else if (destination != RootDestination.Separator && !(args.ItemContainer is Controls.NavigationViewItem))
                 {
                     args.ItemContainer = new Controls.NavigationViewItem();
+                    args.ItemContainer.ContextRequested += OnContextRequested;
                 }
             }
 
             args.IsContainerPrepared = true;
+        }
+
+        private void OnContextRequested(UIElement sender, Windows.UI.Xaml.Input.ContextRequestedEventArgs args)
+        {
+            var container = sender as ListViewItem;
+            if (container.Content is ISessionService session && !session.IsActive)
+            {
+
+            }
+            else if (container.Content is RootDestination destination && destination == RootDestination.AddAccount)
+            {
+                var alt = Window.Current.CoreWindow.GetKeyState(Windows.System.VirtualKey.Menu).HasFlag(CoreVirtualKeyStates.Down);
+                var ctrl = Window.Current.CoreWindow.GetKeyState(Windows.System.VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
+                var shift = Window.Current.CoreWindow.GetKeyState(Windows.System.VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
+
+                if (alt && !ctrl && shift)
+                {
+                    var flyout = new MenuFlyout();
+
+                    flyout.CreateFlyoutItem(new RelayCommand(() => Switch(_lifetime.Create(test: false))), "Production Server", new FontIcon { Glyph = "\uE774" });
+                    flyout.CreateFlyoutItem(new RelayCommand(() => Switch(_lifetime.Create(test: true))), "Test Server", new FontIcon { Glyph = "\uE825" });
+
+                    args.ShowAt(flyout, container);
+                }
+            }
         }
 
         private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
@@ -416,7 +449,7 @@ namespace Unigram.Views.Host
             Automation.SetToolTip(Accounts, SettingsService.Current.IsAccountsSelectorExpanded ? Strings.Resources.AccDescrHideAccounts : Strings.Resources.AccDescrShowAccounts);
         }
 
-        private async void OnItemClick(object sender, ItemClickEventArgs e)
+        private void OnItemClick(object sender, ItemClickEventArgs e)
         {
             if (e.ClickedItem is ISessionService session)
             {
@@ -431,24 +464,7 @@ namespace Unigram.Views.Host
             {
                 if (destination == RootDestination.AddAccount)
                 {
-#if DEBUG
-                    var dialog = new MessagePopup();
-                    dialog.Title = "Environment";
-                    dialog.Message = "Choose your environment";
-                    dialog.PrimaryButtonText = "Live";
-                    dialog.SecondaryButtonText = "Test";
-                    dialog.CloseButtonText = "Cancel";
-
-                    var confirm = await dialog.ShowQueuedAsync();
-                    if (confirm == ContentDialogResult.None)
-                    {
-                        return;
-                    }
-
-                    Switch(_lifetime.Create(test: confirm == ContentDialogResult.Secondary));
-#else
                     Switch(_lifetime.Create());
-#endif
                 }
                 else if (_navigationService?.Frame?.Content is IRootContentPage content)
                 {
@@ -520,6 +536,112 @@ namespace Unigram.Views.Host
 
             var view = ApplicationView.GetForCurrentView();
             view.TryResizeView(ApplicationView.PreferredLaunchViewSize);
+        }
+
+        private async void Theme_Click(object sender, RoutedEventArgs e)
+        {
+            if (ApiInformation.IsMethodPresent("Windows.UI.Composition.Compositor", "CreateGeometricClip"))
+            {
+                var target = new RenderTargetBitmap();
+                await target.RenderAsync(Navigation);
+
+                LayoutRoot.Background = new ImageBrush { ImageSource = target, AlignmentX = AlignmentX.Center, AlignmentY = AlignmentY.Center };
+
+                var actualWidth = (float)ActualWidth;
+                var actualHeight = (float)ActualHeight;
+
+                var transform = Theme.TransformToVisual(this);
+                var point = transform.TransformPoint(new Point()).ToVector2();
+
+                var width = MathF.Max(actualWidth - point.X, actualHeight - point.Y);
+                var diaginal = MathF.Sqrt((width * width) + (width * width));
+
+                var device = CanvasDevice.GetSharedDevice();
+
+                var rect1 = CanvasGeometry.CreateRectangle(device, 0, 0, ActualTheme == ElementTheme.Dark ? actualWidth : 0, ActualTheme == ElementTheme.Dark ? actualHeight : 0);
+
+                var elli1 = CanvasGeometry.CreateCircle(device, point.X + 24, point.Y + 24, ActualTheme == ElementTheme.Dark ? 0 : diaginal);
+                var group1 = CanvasGeometry.CreateGroup(device, new[] { elli1, rect1 }, CanvasFilledRegionDetermination.Alternate);
+
+                var elli2 = CanvasGeometry.CreateCircle(device, point.X + 24, point.Y + 24, ActualTheme == ElementTheme.Dark ? diaginal : 0);
+                var group2 = CanvasGeometry.CreateGroup(device, new[] { elli2, rect1 }, CanvasFilledRegionDetermination.Alternate);
+
+                var visual = ElementCompositionPreview.GetElementVisual(Navigation);
+                var ellipse = visual.Compositor.CreatePathGeometry(new CompositionPath(group2));
+                var clip = visual.Compositor.CreateGeometricClip(ellipse);
+
+                visual.Clip = clip;
+
+                var batch = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+                batch.Completed += (s, args) =>
+                {
+                    visual.Clip = null;
+                    LayoutRoot.Background = null;
+                };
+
+                CompositionEasingFunction ease;
+                if (ActualTheme == ElementTheme.Dark)
+                {
+                    ease = visual.Compositor.CreateCubicBezierEasingFunction(new Vector2(.42f, 0), new Vector2(1, 1));
+                }
+                else
+                {
+                    ease = visual.Compositor.CreateCubicBezierEasingFunction(new Vector2(0, 0), new Vector2(.58f, 1));
+                }
+
+                var anim = visual.Compositor.CreatePathKeyFrameAnimation();
+                anim.InsertKeyFrame(0, new CompositionPath(group2), ease);
+                anim.InsertKeyFrame(1, new CompositionPath(group1), ease);
+                anim.Duration = TimeSpan.FromMilliseconds(500);
+
+                ellipse.StartAnimation("Path", anim);
+                batch.End();
+            }
+
+            if (SettingsService.Current.Appearance.NightMode != NightMode.Disabled)
+            {
+                SettingsService.Current.Appearance.NightMode = NightMode.Disabled;
+                // TODO: Notify user?
+            }
+
+            var theme = ActualTheme == ElementTheme.Dark ? TelegramTheme.Light : TelegramTheme.Dark;
+            SettingsService.Current.Appearance.RequestedTheme = theme;
+            SettingsService.Current.Appearance.UpdateNightMode();
+        }
+
+        private void Navigation_PaneOpening(SplitView sender, object args)
+        {
+            Theme.Visibility = Visibility.Visible;
+
+            var visual = ElementCompositionPreview.GetElementVisual(Theme);
+            var ease = visual.Compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1.0f));
+            var anim = visual.Compositor.CreateVector3KeyFrameAnimation();
+            anim.InsertKeyFrame(0, new Vector3(-48, 32, 0), ease);
+            anim.InsertKeyFrame(1, new Vector3(192, 32, 0), ease);
+            anim.Duration = TimeSpan.FromMilliseconds(350);
+
+            visual.StartAnimation("Offset", anim);
+        }
+
+        private void Navigation_PaneClosing(SplitView sender, SplitViewPaneClosingEventArgs args)
+        {
+            Theme.Visibility = Visibility.Visible;
+
+            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            batch.Completed += (s, args) =>
+            {
+                Theme.Visibility = Visibility.Collapsed;
+            };
+
+            var visual = ElementCompositionPreview.GetElementVisual(Theme);
+            var ease = visual.Compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1.0f));
+            var anim = visual.Compositor.CreateVector3KeyFrameAnimation();
+            anim.InsertKeyFrame(0, new Vector3(192, 32, 0), ease);
+            anim.InsertKeyFrame(1, new Vector3(-48, 32, 0), ease);
+            anim.Duration = TimeSpan.FromMilliseconds(120);
+
+            visual.StartAnimation("Offset", anim);
+            batch.End();
         }
     }
 

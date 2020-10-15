@@ -12,19 +12,20 @@ using Unigram.Services.ViewService;
 using Unigram.ViewModels;
 using Unigram.Views;
 using Unigram.Views.Popups;
+using Windows.Devices.Enumeration;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
-using Windows.Graphics.Display;
 using Windows.Graphics.Imaging;
+using Windows.Media.Capture;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage;
-using Windows.UI;
-using Windows.UI.WindowManagement;
+using Windows.System;
+using Windows.System.Profile;
+using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Hosting;
 
 namespace Unigram.Services
 {
@@ -44,7 +45,11 @@ namespace Unigram.Services
 
         void Start(long chatId, bool video);
 
+        void StartCaptureInternal(GraphicsCaptureItem item);
+
         CallProtocol GetProtocol();
+
+        Task<bool> CheckAccessAsync(bool video);
     }
 
     public class VoipService : TLViewModelBase, IVoipService
@@ -60,7 +65,7 @@ namespace Unigram.Services
 
         private VoIPPage _callPage;
         private OverlayPage _callDialog;
-        private AppWindow _callLifetime;
+        private ViewLifetimeControl _callLifetime;
 
         public VoipService(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, IViewService viewService)
             : base(protoService, cacheService, settingsService, aggregator)
@@ -142,20 +147,11 @@ namespace Unigram.Services
 
         public async void Start(long chatId, bool video)
         {
-            //if (_call == null)
-            //{
-            //    var picker = new GraphicsCapturePicker();
-            //    var item = await picker.PickSingleItemAsync();
-
-            //    // The item may be null if the user dismissed the
-            //    // control without making a selection or hit Cancel.
-            //    if (item != null)
-            //    {
-            //        // We'll define this method later in the document.
-            //        StartCaptureInternal(item);
-            //        //return;
-            //    }
-            //}
+            var permissions = await CheckAccessAsync(video);
+            if (permissions == false)
+            {
+                return;
+            }
 
             var chat = CacheService.GetChat(chatId);
             if (chat == null)
@@ -213,6 +209,84 @@ namespace Unigram.Services
                     await MessagePopup.ShowAsync(string.Format(Strings.Resources.CallNotAvailable, user.GetFullName()), Strings.Resources.AppName, Strings.Resources.OK);
                 }
             }
+        }
+
+        public async Task<bool> CheckAccessAsync(bool video)
+        {
+            var audioPermission = await CheckDeviceAccessAsync(true, video);
+            if (audioPermission == false)
+            {
+                return false;
+            }
+
+            if (video)
+            {
+                var videoPermission = await CheckDeviceAccessAsync(false, true);
+                if (videoPermission == false)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private async Task<bool> CheckDeviceAccessAsync(bool audio, bool video)
+        {
+            // For some reason, as far as I understood, CurrentStatus is always Unspecified on Xbox
+            if (string.Equals(AnalyticsInfo.VersionInfo.DeviceFamily, "Windows.Xbox"))
+            {
+                return true;
+            }
+
+            var access = DeviceAccessInformation.CreateFromDeviceClass(audio ? DeviceClass.AudioCapture : DeviceClass.VideoCapture);
+            if (access.CurrentStatus == DeviceAccessStatus.Unspecified)
+            {
+                MediaCapture capture = null;
+                bool success = false;
+                try
+                {
+                    capture = new MediaCapture();
+                    var settings = new MediaCaptureInitializationSettings();
+                    settings.StreamingCaptureMode = video
+                        ? StreamingCaptureMode.AudioAndVideo
+                        : StreamingCaptureMode.Audio;
+                    await capture.InitializeAsync(settings);
+                    success = true;
+                }
+                catch { }
+                finally
+                {
+                    if (capture != null)
+                    {
+                        capture.Dispose();
+                        capture = null;
+                    }
+                }
+
+                return success;
+            }
+            else if (access.CurrentStatus != DeviceAccessStatus.Allowed)
+            {
+                var message = audio
+                    ? video
+                    ? Strings.Resources.PermissionNoAudio
+                    : Strings.Resources.PermissionNoAudioVideo
+                    : Strings.Resources.PermissionNoCamera;
+
+                this.BeginOnUIThread(async () =>
+                {
+                    var confirm = await MessagePopup.ShowAsync(message, Strings.Resources.AppName, Strings.Resources.PermissionOpenSettings, Strings.Resources.OK);
+                    if (confirm == ContentDialogResult.Primary)
+                    {
+                        await Launcher.LaunchUriAsync(new Uri("ms-settings:appsfeatures-app"));
+                    }
+                });
+
+                return false;
+            }
+
+            return true;
         }
 
         public string CurrentAudioInput
@@ -427,52 +501,46 @@ namespace Unigram.Services
                 }
             }
 
-            await Dispatcher.DispatchAsync(() =>
+            switch (update.Call.State)
             {
-                switch (update.Call.State)
-                {
-                    case CallStateDiscarded discarded:
-                        if (update.Call.IsOutgoing && discarded.Reason is CallDiscardReasonDeclined)
-                        {
-                            _mediaPlayer.Source = MediaSource.CreateFromUri(new Uri("ms-appx:///Assets/Audio/voip_busy.mp3"));
-                            _mediaPlayer.IsLoopingEnabled = true;
-                            _mediaPlayer.Play();
+                case CallStateDiscarded discarded:
+                    if (update.Call.IsOutgoing && discarded.Reason is CallDiscardReasonDeclined)
+                    {
+                        _mediaPlayer.Source = MediaSource.CreateFromUri(new Uri("ms-appx:///Assets/Audio/voip_busy.mp3"));
+                        _mediaPlayer.IsLoopingEnabled = true;
+                        _mediaPlayer.Play();
 
-                            Show(update.Call, null, null, _callStarted);
-                        }
-                        else
-                        {
-                            _mediaPlayer.Source = null;
+                        Show(update.Call, null, null, _callStarted);
+                    }
+                    else
+                    {
+                        _mediaPlayer.Source = null;
 
-                            Hide();
-                        }
-                        break;
-                    case CallStateError error:
                         Hide();
-                        break;
-                    default:
-                        Show(update.Call, _controller, _capturer, _callStarted);
-                        break;
-                }
-            });
+                    }
+                    break;
+                case CallStateError error:
+                    Hide();
+                    break;
+                default:
+                    Show(update.Call, _controller, _capturer, _callStarted);
+                    break;
+            }
         }
 
         private void OnStateUpdated(VoipManager sender, VoipState args)
         {
-            BeginOnUIThread(() =>
+            if (args == VoipState.WaitInit || args == VoipState.WaitInitAck)
             {
-                if (args == VoipState.WaitInit || args == VoipState.WaitInitAck)
-                {
-                    _mediaPlayer.Source = MediaSource.CreateFromUri(new Uri("ms-appx:///Assets/Audio/voip_connecting.mp3"));
-                    _mediaPlayer.IsLoopingEnabled = false;
-                    _mediaPlayer.Play();
-                }
-                else if (args == VoipState.Established)
-                {
-                    _callStarted = DateTime.Now;
-                    _mediaPlayer.Source = null;
-                }
-            });
+                _mediaPlayer.Source = MediaSource.CreateFromUri(new Uri("ms-appx:///Assets/Audio/voip_connecting.mp3"));
+                _mediaPlayer.IsLoopingEnabled = false;
+                _mediaPlayer.Play();
+            }
+            else if (args == VoipState.Established)
+            {
+                _callStarted = DateTime.Now;
+                _mediaPlayer.Source = null;
+            }
         }
 
         private void OnSignalingDataEmitted(VoipManager sender, SignalingDataEmittedEventArgs args)
@@ -548,12 +616,12 @@ namespace Unigram.Services
             {
                 _callDialog.IsOpen = true;
             }
-            //else if (_callLifetime != null)
-            //{
-            //    _callLifetime = await _viewService.OpenAsync(() => _callPage = _callPage ?? new VoIPPage(ProtoService, CacheService, Aggregator, _call, _controller, _capturer, _callStarted), _call.Id);
-            //    _callLifetime.WindowWrapper.ApplicationView().Consolidated -= ApplicationView_Consolidated;
-            //    _callLifetime.WindowWrapper.ApplicationView().Consolidated += ApplicationView_Consolidated;
-            //}
+            else if (_callLifetime != null)
+            {
+                _callLifetime = await _viewService.OpenAsync(control => _callPage = _callPage ?? new VoIPPage(ProtoService, CacheService, Aggregator, this), _call.Id, 720, 540, ApplicationViewMode.Default);
+                _callLifetime.Released -= ApplicationView_Released;
+                _callLifetime.Released += ApplicationView_Released;
+            }
 
             Aggregator.Publish(new UpdateCallDialog(_call, true));
         }
@@ -562,43 +630,11 @@ namespace Unigram.Services
         {
             if (_callPage == null)
             {
-                if (ApiInformation.IsTypePresent("Windows.UI.WindowManagement.AppWindow"))
+                if (ApiInformation.IsPropertyPresent("Windows.UI.ViewManagement.ApplicationView", "PersistedStateId"))
                 {
-                    var window = _callLifetime;
-                    if (window == null)
-                    {
-                        _callPage = new VoIPPage(ProtoService, CacheService, Aggregator, this);
-
-                        window = await AppWindow.TryCreateAsync();
-                        window.PersistedStateId = "Calls";
-                        //window.TitleBar.ExtendsContentIntoTitleBar = true;
-                        window.TitleBar.BackgroundColor = Color.FromArgb(0xFF, 0x17, 0x17, 0x17);
-                        window.TitleBar.ButtonBackgroundColor = Color.FromArgb(0xFF, 0x17, 0x17, 0x17);
-                        window.TitleBar.ForegroundColor = Colors.White;
-                        window.TitleBar.ButtonForegroundColor = Colors.White;
-                        window.Closed += (s, args) =>
-                        {
-                            if (_callPage != null)
-                            {
-                                _callPage.Dispose();
-                                _callPage = null;
-                            }
-
-                            Aggregator.Publish(new UpdateCallDialog(_call, false));
-
-                            _callLifetime = null;
-                            window = null;
-                        };
-
-                        _callLifetime = window;
-                        ElementCompositionPreview.SetAppWindowContent(window, _callPage);
-                    }
-
-                    var scaleFactor = DisplayInformation.GetForCurrentView().RawPixelsPerViewPixel;
-
-                    await window.TryShowAsync();
-                    window.RequestSize(new Windows.Foundation.Size(720 * scaleFactor, 540 * scaleFactor));
-                    //window.RequestMoveAdjacentToCurrentView();
+                    _callLifetime = await _viewService.OpenAsync(control => _callPage = _callPage ?? new VoIPPage(ProtoService, CacheService, Aggregator, this), call.Id, 720, 540, ApplicationViewMode.Default);
+                    _callLifetime.Released -= ApplicationView_Released;
+                    _callLifetime.Released += ApplicationView_Released;
                 }
                 else
                 {
@@ -612,6 +648,11 @@ namespace Unigram.Services
                 }
 
                 Aggregator.Publish(new UpdateCallDialog(call, true));
+            }
+
+            if (_callPage == null)
+            {
+                return;
             }
 
             await _callPage.Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
@@ -630,7 +671,7 @@ namespace Unigram.Services
         {
             if (_callPage != null)
             {
-                await _callPage.Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, async () =>
+                await _callPage.Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                 {
                     if (_callDialog != null)
                     {
@@ -639,7 +680,7 @@ namespace Unigram.Services
                     }
                     else if (_callLifetime != null)
                     {
-                        await _callLifetime.CloseAsync();
+                        _callLifetime.WindowWrapper.Window.Close();
                         _callLifetime = null;
                     }
 
@@ -652,6 +693,22 @@ namespace Unigram.Services
 
                 Aggregator.Publish(new UpdateCallDialog(_call, true));
             }
+        }
+
+        private void ApplicationView_Released(object sender, EventArgs e)
+        {
+            if (_callLifetime != null)
+            {
+                _callLifetime = null;
+            }
+
+            if (_callPage != null)
+            {
+                _callPage.Dispose();
+                _callPage = null;
+            }
+
+            Aggregator.Publish(new UpdateCallDialog(_call, false));
         }
     }
 }

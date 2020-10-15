@@ -119,6 +119,12 @@ namespace Unigram.Views
 
             //Window.Current.SetTitleBar(BlurPanel);
 
+            _viewfinder = ElementCompositionPreview.GetElementVisual(ViewfinderPanel);
+
+            ViewfinderPanel.PointerPressed += Viewfinder_PointerPressed;
+            ViewfinderPanel.PointerMoved += Viewfinder_PointerMoved;
+            ViewfinderPanel.PointerReleased += Viewfinder_PointerReleased;
+
             if (voipService.Call != null)
             {
                 Update(voipService.Call, voipService.CallStarted);
@@ -130,12 +136,6 @@ namespace Unigram.Views
             }
 
             Connect(voipService.Capturer);
-
-            _viewfinder = ElementCompositionPreview.GetElementVisual(ViewfinderPanel);
-
-            ViewfinderPanel.PointerPressed += Viewfinder_PointerPressed;
-            ViewfinderPanel.PointerMoved += Viewfinder_PointerMoved;
-            ViewfinderPanel.PointerReleased += Viewfinder_PointerReleased;
         }
 
         #region Interactions
@@ -146,7 +146,7 @@ namespace Unigram.Views
             Viewfinder.CapturePointer(e.Pointer);
 
             var pointer = e.GetCurrentPoint(this);
-            var point = pointer.Position.ToVector2();
+            var point = pointer.Position.AsVector2();
             _viewfinderDelta = new Vector2(_viewfinder.Offset.X - point.X, _viewfinder.Offset.Y - point.Y);
         }
 
@@ -158,7 +158,7 @@ namespace Unigram.Views
             }
 
             var pointer = e.GetCurrentPoint(this);
-            var delta = _viewfinderDelta + pointer.Position.ToVector2();
+            var delta = _viewfinderDelta + pointer.Position.AsVector2();
 
             _viewfinder.Offset = new Vector3(delta, 0);
         }
@@ -169,7 +169,7 @@ namespace Unigram.Views
             Viewfinder.ReleasePointerCapture(e.Pointer);
 
             var pointer = e.GetCurrentPoint(this);
-            var offset = _viewfinderDelta + pointer.Position.ToVector2();
+            var offset = _viewfinderDelta + pointer.Position.AsVector2();
 
             // Padding maybe
             var p = 8;
@@ -357,7 +357,7 @@ namespace Unigram.Views
 
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            _blurVisual.Size = e.NewSize.ToVector2();
+            _blurVisual.Size = e.NewSize.AsVector2();
 
             if (_collapsed)
             {
@@ -365,7 +365,7 @@ namespace Unigram.Views
                 var position = transform.TransformPoint(new Point());
 
                 _descriptionVisual.Opacity = 0;
-                _largeVisual.Offset = new Vector3(position.ToVector2(), 0);
+                _largeVisual.Offset = new Vector3(position.AsVector2(), 0);
                 _largeVisual.Scale = new Vector3(0.5f);
                 _blurBrush.Properties.InsertScalar("Blur.BlurAmount", 0);
             }
@@ -595,7 +595,7 @@ namespace Unigram.Views
             var position = transform.TransformPoint(new Point());
 
             _descriptionVisual.Opacity = 0;
-            _largeVisual.Offset = new Vector3(position.ToVector2(), 0);
+            _largeVisual.Offset = new Vector3(position.AsVector2(), 0);
             _largeVisual.Scale = new Vector3(0.5f);
             _blurBrush.Properties.InsertScalar("Blur.BlurAmount", 0);
 
@@ -654,7 +654,7 @@ namespace Unigram.Views
             blurAnimation.Duration = TimeSpan.FromMilliseconds(300);
 
             opacityAnimation.InsertKeyFrame(1, 0);
-            offsetAnimation.InsertKeyFrame(1, new Vector3(position.ToVector2(), 0));
+            offsetAnimation.InsertKeyFrame(1, new Vector3(position.AsVector2(), 0));
             scaleAnimation.InsertKeyFrame(1, new Vector3(0.5f));
             blurAnimation.InsertKeyFrame(1, 0);
 
@@ -672,7 +672,7 @@ namespace Unigram.Views
             _aggregator.Publish(new UpdateCall(new Call { State = new CallStateDiscarded { Reason = new CallDiscardReasonEmpty() } }));
         }
 
-        private void Accept_Click(object sender, RoutedEventArgs e)
+        private async void Accept_Click(object sender, RoutedEventArgs e)
         {
             var call = _service.Call;
             if (call == null)
@@ -684,7 +684,7 @@ namespace Unigram.Views
             {
                 _protoService.Send(new CreateCall(call.UserId, _service.GetProtocol(), false));
             }
-            else if (call.State is CallStateReady)
+            else if (call.State is CallStateReady || (call.State is CallStatePending && call.IsOutgoing))
             {
                 var relay = 0L;
                 if (_service.Manager != null)
@@ -697,7 +697,15 @@ namespace Unigram.Views
             }
             else
             {
-                _protoService.Send(new AcceptCall(call.Id, _service.GetProtocol()));
+                var permissions = await _service.CheckAccessAsync(call.IsVideo);
+                if (permissions == false)
+                {
+                    _protoService.Send(new DiscardCall(call.Id, false, 0, call.IsVideo, 0));
+                }
+                else
+                {
+                    _protoService.Send(new AcceptCall(call.Id, _service.GetProtocol()));
+                }
             }
         }
 

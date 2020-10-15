@@ -15,6 +15,7 @@ using Unigram.ViewModels;
 using Unigram.ViewModels.Delegates;
 using Unigram.ViewModels.Gallery;
 using Windows.ApplicationModel;
+using Windows.Foundation;
 using Windows.Foundation.Metadata;
 using Windows.System;
 using Windows.UI;
@@ -23,6 +24,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Documents;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
@@ -191,6 +193,15 @@ namespace Unigram.Views
             _instantView = instantView;
 
             ScrollingHost.FlowDirection = instantView.IsRtl ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+
+            if (instantView.ViewCount > 0)
+            {
+                ViewsLabel.Text = Locale.Declension("Views", instantView.ViewCount);
+            }
+            else
+            {
+                ViewsLabel.Text = string.Empty;
+            }
 
             var processed = 0;
             PageBlock previousBlock = null;
@@ -666,6 +677,14 @@ namespace Unigram.Views
             textBlock.Blocks.Add(paragraph);
             textBlock.TextWrapping = TextWrapping.Wrap;
 
+            textBlock.ContextRequested += Text_ContextRequested;
+            textBlock.ContextMenuOpening += Text_ContextMenuOpening;
+
+            if (ApiInfo.CanAddContextRequestedEvent)
+            {
+                textBlock.AddHandler(ContextRequestedEvent, new TypedEventHandler<UIElement, ContextRequestedEventArgs>(Text_ContextRequested), true);
+            }
+
             //textBlock.Margin = new Thickness(12, 0, 12, 12);
             ProcessRichText(text, span, textBlock);
 
@@ -741,6 +760,16 @@ namespace Unigram.Views
             }
 
             return textBlock;
+        }
+
+        private void Text_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
+        {
+            MessageHelper.Hyperlink_ContextRequested(null, sender, args);
+        }
+
+        private void Text_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            e.Handled = true;
         }
 
         private FrameworkElement ProcessCaption(PageBlockCaption caption)
@@ -1311,6 +1340,8 @@ namespace Unigram.Views
                         var hyperlink = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
                         span.Inlines.Add(hyperlink);
                         hyperlink.Click += (s, args) => Hyperlink_Click(anchorLinkText);
+                        MessageHelper.SetEntityData(hyperlink, anchorLinkText.Url);
+                        MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(anchorLinkText));
                         ProcessRichText(anchorLinkText.Text, hyperlink, textBlock, effects, ref offset);
                     }
                     catch
@@ -1325,6 +1356,8 @@ namespace Unigram.Views
                         var hyperlink = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
                         span.Inlines.Add(hyperlink);
                         hyperlink.Click += (s, args) => Hyperlink_Click(urlText);
+                        MessageHelper.SetEntityData(hyperlink, urlText.Url);
+                        MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(urlText));
                         ProcessRichText(urlText.Text, hyperlink, textBlock, effects, ref offset);
                     }
                     catch

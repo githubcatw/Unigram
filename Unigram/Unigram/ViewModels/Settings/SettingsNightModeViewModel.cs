@@ -13,12 +13,12 @@ using Windows.UI.Xaml.Controls;
 
 namespace Unigram.ViewModels.Settings
 {
-    public class SettingsNightModeViewModel : TLViewModelBase
+    public class SettingsNightModeViewModel : SettingsThemesViewModel
     {
         private readonly ILocationService _locationService;
 
-        public SettingsNightModeViewModel(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService)
-            : base(protoService, cacheService, settingsService, aggregator)
+        public SettingsNightModeViewModel(IProtoService protoService, ICacheService cacheService, ISettingsService settingsService, IEventAggregator aggregator, IThemeService themeService, ILocationService locationService)
+            : base(protoService, cacheService, settingsService, aggregator, themeService, true)
         {
             _locationService = locationService;
 
@@ -43,41 +43,13 @@ namespace Unigram.ViewModels.Settings
             var geopoint = new Geopoint(new BasicGeoposition { Latitude = location.Latitude, Longitude = location.Longitude });
 
             Location = location;
-            UpdateTheme();
+            Settings.Appearance.UpdateNightMode();
 
             var result = await MapLocationFinder.FindLocationsAtAsync(geopoint, MapLocationDesiredAccuracy.Low);
             if (result.Status == MapLocationFinderStatus.Success)
             {
                 Town = result.Locations[0].Address.Town;
             }
-        }
-
-        public async void UpdateTheme()
-        {
-            Settings.Appearance.UpdateTimer();
-
-            var conditions = Settings.Appearance.CheckNightModeConditions();
-            var theme = conditions == null
-                ? Settings.Appearance.GetActualTheme()
-                : conditions == true
-                ? ElementTheme.Dark
-                : ElementTheme.Light;
-
-            foreach (TLWindowContext window in WindowContext.ActiveWrappers)
-            {
-                await window.Dispatcher.DispatchAsync(() =>
-                {
-                    window.UpdateTitleBar();
-
-                    if (window.Content is FrameworkElement element)
-                    {
-                        element.RequestedTheme = theme;
-                    }
-                });
-            }
-
-            Aggregator.Publish(new UpdateSelectedBackground(true, ProtoService.GetSelectedBackground(true)));
-            Aggregator.Publish(new UpdateSelectedBackground(false, ProtoService.GetSelectedBackground(false)));
         }
 
         public NightMode Mode

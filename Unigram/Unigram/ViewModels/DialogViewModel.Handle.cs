@@ -322,7 +322,7 @@ namespace Unigram.ViewModels
 
         public void Handle(UpdateChatReadInbox update)
         {
-            if (update.ChatId == _chat?.Id)
+            if (update.ChatId == _chat?.Id && _type == DialogType.History)
             {
                 BeginOnUIThread(() =>
                 {
@@ -502,16 +502,16 @@ namespace Unigram.ViewModels
                     if (update.NewContent is MessageAlbum)
                     {
                     }
-                    //else if (update.NewContent is MessageExpiredPhoto || update.NewContent is MessageExpiredVideo)
-                    //{
-                    //    // Probably not the best way
-                    //    Items.Remove(message);
-                    //    message.Content = update.NewContent;
-                    //    InsertMessageInOrder(Items, message);
-                    //}
                     else
                     {
                         message.Content = update.NewContent;
+                        
+                        if (update.NewContent is MessageExpiredPhoto || update.NewContent is MessageExpiredVideo)
+                        {
+                            // Probably not the best way
+                            Items.Remove(message);
+                            InsertMessageInOrder(Items, message);
+                        }
                     }
 
                     ProcessFiles(_chat, new[] { message });

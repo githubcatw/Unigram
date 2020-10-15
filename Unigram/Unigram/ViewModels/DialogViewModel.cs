@@ -225,7 +225,7 @@ namespace Unigram.ViewModels
 
         public ItemClickEventHandler Sticker_Click;
 
-        public override IDispatcherWrapper Dispatcher
+        public override IDispatcherContext Dispatcher
         {
             get => base.Dispatcher;
             set
@@ -413,6 +413,11 @@ namespace Unigram.ViewModels
         {
             get
             {
+                if (_type != DialogType.History)
+                {
+                    return 0;
+                }
+
                 return _chat?.UnreadCount ?? 0;
             }
         }
@@ -1124,8 +1129,8 @@ namespace Unigram.ViewModels
                     var thread = _thread;
                     if (thread != null)
                     {
-                        lastReadMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
-                        lastMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastMessageId;
+                        lastReadMessageId = _thread.Messages[_thread.Messages.Count - 1].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
+                        lastMessageId = _thread.Messages[_thread.Messages.Count - 1].InteractionInfo.ReplyInfo.LastMessageId;
                     }
                     else
                     {
@@ -1329,8 +1334,8 @@ namespace Unigram.ViewModels
                 await ProcessEmojiAsync(chat, messages);
             }
 
-            ProcessReplies(chat, messages);
             ProcessAlbums(chat, messages);
+            ProcessReplies(chat, messages);
             ProcessFiles(chat, messages);
         }
 
@@ -1670,6 +1675,7 @@ namespace Unigram.ViewModels
 
                 Handle(new UpdateMessageContent(chat.Id, group.Item1.Id, group.Item1.Content));
                 Handle(new UpdateMessageEdited(chat.Id, group.Item1.Id, group.Item1.EditDate, group.Item1.ReplyMarkup));
+                Handle(new UpdateMessageInteractionInfo(chat.Id, group.Item1.Id, group.Item1.InteractionInfo));
             }
         }
 
@@ -1679,9 +1685,9 @@ namespace Unigram.ViewModels
             {
                 var thread = _thread;
                 if (thread?.ChatId == message.ReplyInChatId &&
-                    thread?.Messages[0].Id == message.ReplyToMessageId)
+                    thread?.Messages[thread.Messages.Count - 1].Id == message.ReplyToMessageId)
                 {
-                    message.ReplyToMessageId = 0;
+                    message.ReplyToMessageState = ReplyToMessageState.Hidden;
                     continue;
                 }
 
@@ -1729,7 +1735,12 @@ namespace Unigram.ViewModels
                 }
 
                 Thread = await ProtoService.SendAsync(new GetMessageThread(result1, result2)) as MessageThreadInfo;
-                parameter = _thread.ChatId;
+                parameter = _thread?.ChatId;
+
+                if (parameter == null)
+                {
+                    return;
+                }
             }
 
             var chat = ProtoService.GetChat((long)parameter);
@@ -1794,8 +1805,8 @@ namespace Unigram.ViewModels
                 var thread = _thread;
                 if (thread != null)
                 {
-                    lastReadMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
-                    lastMessageId = _thread.Messages[0].InteractionInfo.ReplyInfo.LastMessageId;
+                    lastReadMessageId = _thread.Messages[_thread.Messages.Count - 1].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
+                    lastMessageId = _thread.Messages[_thread.Messages.Count - 1].InteractionInfo.ReplyInfo.LastMessageId;
                 }
                 else
                 {
@@ -2031,7 +2042,7 @@ namespace Unigram.ViewModels
                         var thread = _thread;
                         if (thread != null)
                         {
-                            lastReadMessageId = thread.Messages[0].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
+                            lastReadMessageId = thread.Messages[thread.Messages.Count - 1].InteractionInfo.ReplyInfo.LastReadInboxMessageId;
                         }
                         else
                         {
@@ -3591,13 +3602,6 @@ namespace Unigram.ViewModels
 
             return false;
         }
-    }
-
-    public enum ReplyToMessageState
-    {
-        None,
-        Loading,
-        Deleted
     }
 
     [Flags]

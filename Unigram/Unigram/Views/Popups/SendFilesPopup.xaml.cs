@@ -16,8 +16,8 @@ using Unigram.ViewModels;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Foundation.Metadata;
-using Windows.Graphics.Imaging;
 using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.UI.Core;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
@@ -312,8 +312,25 @@ namespace Unigram.Views.Popups
 
         public void Accept()
         {
-            Caption = CaptionInput.GetFormattedText();
-            Hide(ContentDialogResult.Primary);
+            if (CaptionInput.HandwritingView.IsOpen)
+            {
+                RoutedEventHandler handler = null;
+                handler = (s, args) =>
+                {
+                    CaptionInput.HandwritingView.Unloaded -= handler;
+
+                    Caption = CaptionInput.GetFormattedText();
+                    Hide(ContentDialogResult.Primary);
+                };
+
+                CaptionInput.HandwritingView.Unloaded += handler;
+                CaptionInput.HandwritingView.TryClose();
+            }
+            else
+            {
+                Caption = CaptionInput.GetFormattedText();
+                Hide(ContentDialogResult.Primary);
+            }
         }
 
         private async void OnPaste(object sender, TextControlPasteEventArgs e)
@@ -347,23 +364,28 @@ namespace Unigram.Views.Popups
             {
                 var bitmap = await package.GetBitmapAsync();
 
-                var fileName = string.Format("image_{0:yyyy}-{0:MM}-{0:dd}_{0:HH}-{0:mm}-{0:ss}.png", DateTime.Now);
+                var fileName = string.Format("image_{0:yyyy}-{0:MM}-{0:dd}_{0:HH}-{0:mm}-{0:ss}.bmp", DateTime.Now);
                 var cache = await ApplicationData.Current.TemporaryFolder.CreateFileAsync(fileName, CreationCollisionOption.GenerateUniqueName);
 
                 using (var stream = await bitmap.OpenReadAsync())
+                using (var reader = new DataReader(stream.GetInputStreamAt(0)))
+                using (var output = await cache.OpenAsync(FileAccessMode.ReadWrite))
                 {
-                    var result = await ImageHelper.TranscodeAsync(stream, cache, BitmapEncoder.PngEncoderId);
-                    var photo = await StoragePhoto.CreateAsync(result);
-                    if (photo == null)
-                    {
-                        return;
-                    }
-
-                    Items.Add(photo);
-
-                    UpdateView();
-                    UpdatePanel();
+                    await reader.LoadAsync((uint)stream.Size);
+                    var buffer = reader.ReadBuffer(reader.UnconsumedBufferLength);
+                    await output.WriteAsync(buffer);
                 }
+
+                var photo = await StoragePhoto.CreateAsync(cache);
+                if (photo == null)
+                {
+                    return;
+                }
+
+                Items.Add(photo);
+
+                UpdateView();
+                UpdatePanel();
             }
             else if (package.AvailableFormats.Contains(StandardDataFormats.StorageItems))
             {
@@ -588,7 +610,15 @@ namespace Unigram.Views.Popups
         private void OnCharacterReceived(CoreWindow sender, CharacterReceivedEventArgs args)
         {
             var character = Encoding.UTF32.GetString(BitConverter.GetBytes(args.KeyCode));
-            if (character.Length == 0 || (char.IsControl(character[0]) && character != "\u0016" && character != "\r") || char.IsWhiteSpace(character[0]))
+            if (character.Length == 0)
+            {
+                return;
+            }
+            else if (character != "\u0016" && character != "\r" && char.IsControl(character[0]))
+            {
+                return;
+            }
+            else if (character != "\u0016" && character != "\r" && char.IsWhiteSpace(character[0]))
             {
                 return;
             }
